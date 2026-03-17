@@ -1,0 +1,139 @@
+package limitless
+
+import (
+	"context"
+	"fmt"
+	"sync"
+)
+
+// MarketFetcher retrieves market data from the Limitless Exchange API.
+type MarketFetcher struct {
+	client     *HttpClient
+	logger     Logger
+	venueCache map[string]Venue
+	mu         sync.RWMutex
+}
+
+// MarketFetcherOption configures a MarketFetcher.
+type MarketFetcherOption func(*MarketFetcher)
+
+// WithMarketLogger sets the logger for the MarketFetcher.
+func WithMarketLogger(l Logger) MarketFetcherOption {
+	return func(f *MarketFetcher) {
+		f.logger = l
+	}
+}
+
+// NewMarketFetcher creates a new market data fetcher.
+func NewMarketFetcher(client *HttpClient, opts ...MarketFetcherOption) *MarketFetcher {
+	f := &MarketFetcher{
+		client:     client,
+		logger:     NewNoOpLogger(),
+		venueCache: make(map[string]Venue),
+	}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
+}
+
+// GetActiveMarkets fetches active markets with optional query parameters.
+func (f *MarketFetcher) GetActiveMarkets(ctx context.Context, params *ActiveMarketsParams) (*ActiveMarketsResponse, error) {
+	endpoint := "/markets/active"
+
+	if params != nil {
+		q := ""
+		sep := "?"
+		if params.Limit > 0 {
+			q += fmt.Sprintf("%slimit=%d", sep, params.Limit)
+			sep = "&"
+		}
+		if params.Page > 0 {
+			q += fmt.Sprintf("%spage=%d", sep, params.Page)
+			sep = "&"
+		}
+		if params.SortBy != "" {
+			q += fmt.Sprintf("%ssortBy=%s", sep, string(params.SortBy))
+		}
+		endpoint += q
+	}
+
+	f.logger.Debug("Fetching active markets")
+
+	var result ActiveMarketsResponse
+	if err := f.client.Get(ctx, endpoint, &result); err != nil {
+		f.logger.Error("Failed to fetch active markets", err)
+		return nil, err
+	}
+
+	f.logger.Info("Active markets fetched successfully", map[string]any{
+		"count": len(result.Data),
+		"total": result.TotalMarketsCount,
+	})
+
+	return &result, nil
+}
+
+// GetMarket fetches a single market by slug and caches its venue data.
+func (f *MarketFetcher) GetMarket(ctx context.Context, slug string) (*Market, error) {
+	f.logger.Debug("Fetching market", map[string]any{"slug": slug})
+
+	var market Market
+	if err := f.client.Get(ctx, "/markets/"+slug, &market); err != nil {
+		f.logger.Error("Failed to fetch market", err, map[string]any{"slug": slug})
+		return nil, err
+	}
+
+	if market.Venue != nil {
+		f.mu.Lock()
+		f.venueCache[slug] = *market.Venue
+		f.mu.Unlock()
+
+		f.logger.Debug("Venue cached for order signing", map[string]any{
+			"slug":     slug,
+			"exchange": market.Venue.Exchange,
+		})
+	} else {
+		f.logger.Warn("Market has no venue data", map[string]any{"slug": slug})
+	}
+
+	f.logger.Info("Market fetched successfully", map[string]any{
+		"slug":  slug,
+		"title": market.Title,
+	})
+
+	return &market, nil
+}
+
+// GetVenue returns cached venue information for a market.
+// Returns the venue and true if found, or zero value and false if not cached.
+func (f *MarketFetcher) GetVenue(slug string) (Venue, bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	v, ok := f.venueCache[slug]
+	if ok {
+		f.logger.Debug("Venue cache hit", map[string]any{"slug": slug})
+	} else {
+		f.logger.Debug("Venue cache miss", map[string]any{"slug": slug})
+	}
+	return v, ok
+}
+
+// GetOrderBook fetches the orderbook for a CLOB market.
+func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBook, error) {
+	f.logger.Debug("Fetching orderbook", map[string]any{"slug": slug})
+
+	var ob OrderBook
+	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/orderbook", slug), &ob); err != nil {
+		f.logger.Error("Failed to fetch orderbook", err, map[string]any{"slug": slug})
+		return nil, err
+	}
+
+	f.logger.Info("Orderbook fetched successfully", map[string]any{
+		"slug": slug,
+		"bids": len(ob.Bids),
+		"asks": len(ob.Asks),
+	})
+
+	return &ob, nil
+}

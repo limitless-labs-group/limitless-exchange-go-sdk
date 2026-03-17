@@ -1,0 +1,50 @@
+# Go binaries and shared objects
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+
+# Test binaries and profiling outputs
+*.test
+*.out
+*.prof
+cpu.prof
+mem.prof
+coverage.out
+coverage.txt
+coverage.html
+.coverprofile
+
+# Build artifacts
+bin/
+build/
+dist/
+
+# Go workspace files (project uses go.mod)
+go.work
+go.work.sum
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
