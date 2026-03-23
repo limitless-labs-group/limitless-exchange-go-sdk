@@ -1,6 +1,6 @@
 module github.com/limitless-labs-group/limitless-exchange-go-sdk
 
-go 1.22
+go 1.24.0
 
 require (
 	github.com/ethereum/go-ethereum v1.14.12
@@ -19,8 +19,8 @@ require (
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/supranational/blst v0.3.13 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
