@@ -1,5 +1,7 @@
 package limitless
 
+import "encoding/json"
+
 // CollateralToken contains token contract information.
 type CollateralToken struct {
 	Address  string `json:"address"`
@@ -25,12 +27,12 @@ type MarketMetadata struct {
 
 // MarketSettings contains CLOB market settings.
 type MarketSettings struct {
-	MinSize      string  `json:"minSize"`
-	MaxSpread    float64 `json:"maxSpread"`
-	DailyReward  string  `json:"dailyReward"`
-	RewardsEpoch any     `json:"rewardsEpoch"`
-	C            any     `json:"c"`
-	RebateRate   *float64 `json:"rebateRate,omitempty"`
+	MinSize      string          `json:"minSize"`
+	MaxSpread    json.Number     `json:"maxSpread"`
+	DailyReward  string          `json:"dailyReward"`
+	RewardsEpoch any             `json:"rewardsEpoch"`
+	C            any             `json:"c"`
+	RebateRate   json.Number     `json:"rebateRate,omitempty"`
 }
 
 // TradePrices contains buy/sell price data.
@@ -95,6 +97,9 @@ type OrderBook struct {
 
 // Market represents complete market information (1:1 with API response).
 type Market struct {
+	// client is attached by MarketFetcher for fluent API methods like GetUserOrders().
+	client *HttpClient `json:"-"`
+
 	// Common fields
 	ID                  int              `json:"id"`
 	Slug                string           `json:"slug"`
@@ -152,6 +157,30 @@ type Market struct {
 	Type           *string         `json:"type,omitempty"`
 	Outcomes       []MarketOutcome `json:"outcomes,omitempty"`
 	ResolutionDate *string         `json:"resolutionDate,omitempty"`
+}
+
+// UserOrder represents an order returned by the user-orders endpoint.
+type UserOrder struct {
+	ID            string          `json:"id"`
+	CreatedAt     string          `json:"createdAt"`
+	MakerAmount   json.Number     `json:"makerAmount"`
+	TakerAmount   json.Number     `json:"takerAmount"`
+	Expiration    *string         `json:"expiration"`
+	SignatureType int             `json:"signatureType"`
+	Salt          json.Number     `json:"salt"`
+	Maker         string          `json:"maker"`
+	Signer        string          `json:"signer"`
+	Taker         string          `json:"taker"`
+	TokenID       string          `json:"tokenId"`
+	Side          json.Number     `json:"side"`
+	FeeRateBps    int             `json:"feeRateBps"`
+	Nonce         int             `json:"nonce"`
+	Signature     string          `json:"signature"`
+	OrderType     string          `json:"orderType"`
+	Price         *float64        `json:"price"`
+	MarketID      int             `json:"marketId"`
+	Status        string          `json:"status,omitempty"`
+	FilledSize    json.Number     `json:"filledSize,omitempty"`
 }
 
 // ActiveMarketsSortBy constrains sort values for active markets.

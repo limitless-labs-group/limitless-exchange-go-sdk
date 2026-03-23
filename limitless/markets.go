@@ -66,6 +66,11 @@ func (f *MarketFetcher) GetActiveMarkets(ctx context.Context, params *ActiveMark
 		return nil, err
 	}
 
+	// Attach client for fluent API on each market
+	for i := range result.Data {
+		result.Data[i].client = f.client
+	}
+
 	f.logger.Info("Active markets fetched successfully", map[string]any{
 		"count": len(result.Data),
 		"total": result.TotalMarketsCount,
@@ -83,6 +88,9 @@ func (f *MarketFetcher) GetMarket(ctx context.Context, slug string) (*Market, er
 		f.logger.Error("Failed to fetch market", err, map[string]any{"slug": slug})
 		return nil, err
 	}
+
+	// Attach client for fluent API (market.GetUserOrders)
+	market.client = f.client
 
 	if market.Venue != nil {
 		f.mu.Lock()
@@ -136,4 +144,42 @@ func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBo
 	})
 
 	return &ob, nil
+}
+
+// GetUserOrders fetches the authenticated user's orders for a specific market.
+// Requires an API key to be set on the HttpClient.
+func (f *MarketFetcher) GetUserOrders(ctx context.Context, slug string) ([]UserOrder, error) {
+	f.logger.Debug("Fetching user orders", map[string]any{"slug": slug})
+
+	var orders []UserOrder
+	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", slug), &orders); err != nil {
+		f.logger.Error("Failed to fetch user orders", err, map[string]any{"slug": slug})
+		return nil, err
+	}
+
+	f.logger.Info("User orders fetched successfully", map[string]any{
+		"slug":  slug,
+		"count": len(orders),
+	})
+
+	return orders, nil
+}
+
+// GetUserOrders fetches the authenticated user's orders for this market.
+// The Market must have been obtained via MarketFetcher.GetMarket() or
+// MarketFetcher.GetActiveMarkets() so that the HTTP client is attached.
+func (m *Market) GetUserOrders(ctx context.Context) ([]UserOrder, error) {
+	if m.client == nil {
+		return nil, fmt.Errorf(
+			"this Market instance has no HTTP client attached; " +
+				"fetch the market via MarketFetcher.GetMarket() to use this method",
+		)
+	}
+
+	var orders []UserOrder
+	if err := m.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", m.Slug), &orders); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
 }

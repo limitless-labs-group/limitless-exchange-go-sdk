@@ -15,7 +15,7 @@ import (
 const sdkID = "lmts-sdk-go"
 
 // sdkVersion is injected at release build time via -ldflags.
-var sdkVersion = "0.0.0"
+var sdkVersion = "1.0.3"
 
 func resolveSDKVersion() string {
 	if sdkVersion != "" {
@@ -138,11 +138,13 @@ func AllowStatus(code int) RequestOption {
 
 func (c *HttpClient) doRequest(ctx context.Context, method, path string, body, result any) error {
 	var bodyReader io.Reader
+	var bodyBytes []byte
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
+		bodyBytes = b
 		bodyReader = bytes.NewReader(b)
 	}
 
@@ -161,9 +163,13 @@ func (c *HttpClient) doRequest(ctx context.Context, method, path string, body, r
 	if c.apiKey != "" {
 		logHeaders["X-API-Key"] = "***"
 	}
-	c.logger.Debug(fmt.Sprintf("→ %s %s", method, url), map[string]any{
+	logMeta := map[string]any{
 		"headers": logHeaders,
-	})
+	}
+	if len(bodyBytes) > 0 {
+		logMeta["body"] = string(bodyBytes)
+	}
+	c.logger.Debug(fmt.Sprintf("→ %s %s", method, url), logMeta)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -183,7 +189,9 @@ func (c *HttpClient) doRequest(ctx context.Context, method, path string, body, r
 		return parseAPIError(resp.StatusCode, respBody, path, method)
 	}
 
-	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path))
+	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path), map[string]any{
+		"body": string(respBody),
+	})
 
 	if result != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, result); err != nil {

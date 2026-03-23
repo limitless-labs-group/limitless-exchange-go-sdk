@@ -3,6 +3,7 @@ package limitless
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // Logger defines the logging interface for the SDK.
@@ -50,19 +51,19 @@ func (l *ConsoleLogger) shouldLog(level LogLevel) bool {
 
 func (l *ConsoleLogger) Debug(msg string, meta ...map[string]any) {
 	if l.shouldLog(LogLevelDebug) {
-		fmt.Fprintf(os.Stderr, "[Limitless SDK] DEBUG %s %v\n", msg, metaStr(meta))
+		fmt.Fprintf(os.Stderr, "%s [Limitless SDK] DEBUG %s %v\n", time.Now().Format("2006-01-02 15:04:05"), msg, metaStr(meta))
 	}
 }
 
 func (l *ConsoleLogger) Info(msg string, meta ...map[string]any) {
 	if l.shouldLog(LogLevelInfo) {
-		fmt.Fprintf(os.Stderr, "[Limitless SDK] INFO  %s %v\n", msg, metaStr(meta))
+		fmt.Fprintf(os.Stderr, "%s [Limitless SDK] INFO  %s %v\n", time.Now().Format("2006-01-02 15:04:05"), msg, metaStr(meta))
 	}
 }
 
 func (l *ConsoleLogger) Warn(msg string, meta ...map[string]any) {
 	if l.shouldLog(LogLevelWarn) {
-		fmt.Fprintf(os.Stderr, "[Limitless SDK] WARN  %s %v\n", msg, metaStr(meta))
+		fmt.Fprintf(os.Stderr, "%s [Limitless SDK] WARN  %s %v\n", time.Now().Format("2006-01-02 15:04:05"), msg, metaStr(meta))
 	}
 }
 
@@ -72,7 +73,7 @@ func (l *ConsoleLogger) Error(msg string, err error, meta ...map[string]any) {
 		if err != nil {
 			errMsg = " - " + err.Error()
 		}
-		fmt.Fprintf(os.Stderr, "[Limitless SDK] ERROR %s%s %v\n", msg, errMsg, metaStr(meta))
+		fmt.Fprintf(os.Stderr, "%s [Limitless SDK] ERROR %s%s %v\n", time.Now().Format("2006-01-02 15:04:05"), msg, errMsg, metaStr(meta))
 	}
 }
 
