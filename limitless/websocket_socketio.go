@@ -44,20 +44,22 @@ type handlerEntry struct {
 
 // socketIOClient is a minimal Socket.IO client over gorilla/websocket.
 type socketIOClient struct {
-	conn       *websocket.Conn
-	namespace  string
-	handlers   map[string][]handlerEntry
-	mu         sync.RWMutex
-	writeMu    sync.Mutex
-	pingTicker *time.Ticker
-	done       chan struct{}
-	closed     bool
-	closeMu    sync.Mutex
-	ackID      int
-	nextHID    int64 // next handler ID
-	ackChans   map[int]chan json.RawMessage
-	ackMu      sync.Mutex
-	logger     Logger
+	conn         *websocket.Conn
+	namespace    string
+	handlers     map[string][]handlerEntry
+	mu           sync.RWMutex
+	writeMu      sync.Mutex
+	pingDeadline time.Duration // pingInterval + pingTimeout
+	lastPing     time.Time     // last time we received a server ping (or connected)
+	lastPingMu   sync.Mutex
+	done         chan struct{}
+	closed       bool
+	closeMu      sync.Mutex
+	ackID        int
+	nextHID      int64 // next handler ID
+	ackChans     map[int]chan json.RawMessage
+	ackMu        sync.Mutex
+	logger       Logger
 }
 
 func newSocketIOClient(wsURL, namespace string, apiKey string, logger Logger) (*socketIOClient, error) {
@@ -135,13 +137,19 @@ func newSocketIOClient(wsURL, namespace string, apiKey string, logger Logger) (*
 
 	logger.Info("Socket.IO connected to namespace", map[string]any{"namespace": namespace})
 
-	// Start ping loop
+	// In Engine.IO v4, the SERVER sends pings and the CLIENT responds with pongs.
+	// We don't send pings; we only monitor for server ping timeout.
 	pingInterval := time.Duration(config.PingInterval) * time.Millisecond
 	if pingInterval <= 0 {
 		pingInterval = 25 * time.Second
 	}
-	s.pingTicker = time.NewTicker(pingInterval)
-	go s.pingLoop()
+	pingTimeout := time.Duration(config.PingTimeout) * time.Millisecond
+	if pingTimeout <= 0 {
+		pingTimeout = 20 * time.Second
+	}
+	s.pingDeadline = pingInterval + pingTimeout
+	s.lastPing = time.Now()
+	go s.pingMonitor()
 
 	// Start read loop
 	go s.readLoop()
@@ -155,12 +163,25 @@ func (s *socketIOClient) writeMessage(msg string) error {
 	return s.conn.WriteMessage(websocket.TextMessage, []byte(msg))
 }
 
-func (s *socketIOClient) pingLoop() {
+func (s *socketIOClient) pingMonitor() {
+	// Check every second whether the server has missed its ping deadline.
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-s.pingTicker.C:
-			if err := s.writeMessage(eioPing); err != nil {
-				s.logger.Error("Failed to send ping", err)
+		case <-ticker.C:
+			s.lastPingMu.Lock()
+			elapsed := time.Since(s.lastPing)
+			deadline := s.pingDeadline
+			s.lastPingMu.Unlock()
+
+			if elapsed > deadline {
+				s.logger.Warn("Server ping timeout", map[string]any{
+					"elapsed":  elapsed.String(),
+					"deadline": deadline.String(),
+				})
+				s.dispatchEvent("disconnect", json.RawMessage(`"ping timeout"`))
 				return
 			}
 		case <-s.done:
@@ -202,7 +223,10 @@ func (s *socketIOClient) handleMessage(msg string) {
 	case msg == eioPong:
 		// Pong received, ignore
 	case msg == eioPing:
-		// Server ping, respond with pong
+		// Server ping (EIO v4), respond with pong and reset deadline
+		s.lastPingMu.Lock()
+		s.lastPing = time.Now()
+		s.lastPingMu.Unlock()
 		_ = s.writeMessage(eioPong)
 	case strings.HasPrefix(msg, eioMessage):
 		s.handleSocketIOPacket(msg[1:])
@@ -424,9 +448,6 @@ func (s *socketIOClient) Close() error {
 	s.closeMu.Unlock()
 
 	close(s.done)
-	if s.pingTicker != nil {
-		s.pingTicker.Stop()
-	}
 
 	// Send Socket.IO disconnect
 	_ = s.writeMessage(eioMessage + sioDisconnect + s.namespace + ",")
