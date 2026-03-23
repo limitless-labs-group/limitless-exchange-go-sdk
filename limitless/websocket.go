@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
+
+var socketIOClientFactory = newSocketIOClient
 
 // wsHandlerEntry pairs a handler function with a unique ID.
 type wsHandlerEntry struct {
@@ -121,9 +125,12 @@ func (ws *WebSocketClient) IsConnected() bool {
 
 // SetAPIKey sets the API key. If already connected, reconnects with new auth.
 func (ws *WebSocketClient) SetAPIKey(key string) {
+	ws.mu.Lock()
 	ws.config.APIKey = key
+	connected := ws.state == StateConnected && ws.sio != nil
+	ws.mu.Unlock()
 
-	if ws.IsConnected() {
+	if connected {
 		ws.logger.Info("API key updated, reconnecting...")
 		go func() {
 			ws.Disconnect()
@@ -140,10 +147,11 @@ func (ws *WebSocketClient) Connect(ctx context.Context) error {
 		ws.logger.Info("Already connected or connecting")
 		return nil
 	}
+	config := ws.config
 	ws.state = StateConnecting
 	ws.mu.Unlock()
 
-	ws.logger.Info("Connecting to WebSocket", map[string]any{"url": ws.config.URL})
+	ws.logger.Info("Connecting to WebSocket", map[string]any{"url": config.URL})
 
 	// Create connection with timeout
 	type connectResult struct {
@@ -153,11 +161,11 @@ func (ws *WebSocketClient) Connect(ctx context.Context) error {
 	ch := make(chan connectResult, 1)
 
 	go func() {
-		sio, err := newSocketIOClient(ws.config.URL, "/markets", ws.config.APIKey, ws.logger)
+		sio, err := socketIOClientFactory(config.URL, "/markets", config.APIKey, ws.logger)
 		ch <- connectResult{sio, err}
 	}()
 
-	timeout := time.Duration(ws.config.TimeoutMs) * time.Millisecond
+	timeout := time.Duration(config.TimeoutMs) * time.Millisecond
 	select {
 	case result := <-ch:
 		if result.err != nil {
@@ -196,7 +204,7 @@ func (ws *WebSocketClient) Connect(ctx context.Context) error {
 		ws.mu.Lock()
 		ws.state = StateError
 		ws.mu.Unlock()
-		return fmt.Errorf("connection timeout after %dms", ws.config.TimeoutMs)
+		return fmt.Errorf("connection timeout after %dms", config.TimeoutMs)
 
 	case <-ctx.Done():
 		ws.mu.Lock()
@@ -209,20 +217,18 @@ func (ws *WebSocketClient) Connect(ctx context.Context) error {
 // Disconnect closes the WebSocket connection.
 func (ws *WebSocketClient) Disconnect() {
 	ws.mu.Lock()
-	defer ws.mu.Unlock()
+	sio := ws.sio
+	ws.sio = nil
+	ws.state = StateDisconnected
+	ws.mu.Unlock()
 
-	if ws.sio == nil {
+	if sio == nil {
 		return
 	}
 
 	ws.logger.Info("Disconnecting from WebSocket")
-	_ = ws.sio.Close()
-	ws.sio = nil
-	ws.state = StateDisconnected
-	ws.subscriptions = make(map[string]SubscriptionOptions)
+	_ = sio.Close()
 }
-
-
 
 // Subscribe subscribes to a channel.
 func (ws *WebSocketClient) Subscribe(ctx context.Context, channel SubscriptionChannel, options SubscriptionOptions) error {
@@ -231,24 +237,29 @@ func (ws *WebSocketClient) Subscribe(ctx context.Context, channel SubscriptionCh
 	}
 
 	// Check auth requirement
-	if (channel == ChannelSubscribePositions || channel == ChannelSubscribeTransactions) && ws.config.APIKey == "" {
+	if requiresWebSocketAuth(channel) && ws.config.APIKey == "" {
 		return fmt.Errorf(
 			"API key is required for '%s' subscription. "+
-				"Please provide an API key via WithWebSocketAPIKey or set LIMITLESS_API_KEY environment variable",
+				"Please provide an API key via WithWebSocketAPIKey or set LIMITLESS_API_KEY (legacy fallback, scheduled for removal in v1.0.5)",
 			channel,
 		)
 	}
 
-	key := ws.subscriptionKey(channel, options)
+	normalizedOptions := normalizeSubscriptionOptions(options)
+	key := ws.subscriptionKey(channel, normalizedOptions)
 	ws.mu.Lock()
-	ws.subscriptions[key] = options
+	ws.subscriptions[key] = normalizedOptions
+	sio := ws.sio
 	ws.mu.Unlock()
+	if sio == nil {
+		return fmt.Errorf("WebSocket not connected. Call Connect() first")
+	}
 
 	ws.logger.Info("Subscribing to channel", map[string]any{
 		"channel": string(channel),
 	})
 
-	if err := ws.sio.Emit(string(channel), options); err != nil {
+	if err := sio.Emit(string(channel), normalizedOptions); err != nil {
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 
@@ -262,10 +273,15 @@ func (ws *WebSocketClient) Unsubscribe(ctx context.Context, channel Subscription
 		return fmt.Errorf("WebSocket not connected")
 	}
 
-	key := ws.subscriptionKey(channel, options)
+	normalizedOptions := normalizeSubscriptionOptions(options)
+	key := ws.subscriptionKey(channel, normalizedOptions)
 	ws.mu.Lock()
 	delete(ws.subscriptions, key)
+	sio := ws.sio
 	ws.mu.Unlock()
+	if sio == nil {
+		return fmt.Errorf("WebSocket not connected")
+	}
 
 	ws.logger.Info("Unsubscribing from channel", map[string]any{
 		"channel": string(channel),
@@ -274,23 +290,23 @@ func (ws *WebSocketClient) Unsubscribe(ctx context.Context, channel Subscription
 	data := map[string]any{
 		"channel": string(channel),
 	}
-	if options.MarketSlug != "" {
-		data["marketSlug"] = options.MarketSlug
+	if normalizedOptions.MarketSlug != "" {
+		data["marketSlug"] = normalizedOptions.MarketSlug
 	}
-	if len(options.MarketSlugs) > 0 {
-		data["marketSlugs"] = options.MarketSlugs
+	if len(normalizedOptions.MarketSlugs) > 0 {
+		data["marketSlugs"] = normalizedOptions.MarketSlugs
 	}
-	if options.MarketAddress != "" {
-		data["marketAddress"] = options.MarketAddress
+	if normalizedOptions.MarketAddress != "" {
+		data["marketAddress"] = normalizedOptions.MarketAddress
 	}
-	if len(options.MarketAddresses) > 0 {
-		data["marketAddresses"] = options.MarketAddresses
+	if len(normalizedOptions.MarketAddresses) > 0 {
+		data["marketAddresses"] = normalizedOptions.MarketAddresses
 	}
-	if len(options.Filters) > 0 {
-		data["filters"] = options.Filters
+	if len(normalizedOptions.Filters) > 0 {
+		data["filters"] = normalizedOptions.Filters
 	}
 
-	resp, err := ws.sio.EmitWithAck("unsubscribe", data, 5*time.Second)
+	resp, err := sio.EmitWithAck("unsubscribe", data, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("unsubscribe failed: %w", err)
 	}
@@ -345,6 +361,7 @@ func (ws *WebSocketClient) Once(event string, handler func(json.RawMessage)) int
 // are removed. If no handlerIDs are provided, all handlers for the event are removed.
 func (ws *WebSocketClient) Off(event string, handlerIDs ...int64) {
 	ws.mu.Lock()
+	var remaining []wsHandlerEntry
 	if len(handlerIDs) == 0 {
 		delete(ws.handlers, event)
 	} else {
@@ -362,20 +379,22 @@ func (ws *WebSocketClient) Off(event string, handlerIDs ...int64) {
 		if len(filtered) == 0 {
 			delete(ws.handlers, event)
 		} else {
-			ws.handlers[event] = filtered
+			ws.handlers[event] = append([]wsHandlerEntry(nil), filtered...)
+			remaining = append([]wsHandlerEntry(nil), ws.handlers[event]...)
 		}
+	}
+	sio := ws.sio
+	if len(handlerIDs) == 0 {
+		remaining = nil
+	} else if len(remaining) == 0 {
+		remaining = append([]wsHandlerEntry(nil), ws.handlers[event]...)
 	}
 	ws.mu.Unlock()
 
-	ws.mu.RLock()
-	sio := ws.sio
-	ws.mu.RUnlock()
-
 	if sio != nil {
-		if len(handlerIDs) == 0 {
-			sio.Off(event)
-		} else {
-			sio.Off(event, handlerIDs...)
+		sio.Off(event)
+		for _, entry := range remaining {
+			sio.On(event, entry.fn)
 		}
 	}
 }
@@ -548,27 +567,22 @@ func (ws *WebSocketClient) resubscribeAll() {
 }
 
 func (ws *WebSocketClient) subscriptionKey(channel SubscriptionChannel, options SubscriptionOptions) string {
-	slug := options.MarketSlug
-	if slug == "" {
-		slug = "global"
+	normalized := normalizeSubscriptionOptions(options)
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return string(channel) + "|" + fmt.Sprintf("%v", normalized)
 	}
-	return string(channel) + ":" + slug
+	return string(channel) + "|" + string(raw)
 }
 
 func (ws *WebSocketClient) channelFromKey(key string) SubscriptionChannel {
-	parts := splitFirst(key, ":")
-	return SubscriptionChannel(parts)
-}
-
-func splitFirst(s, sep string) string {
-	idx := 0
-	for i := 0; i < len(s); i++ {
-		if string(s[i]) == sep {
-			return s[:idx]
-		}
-		idx++
+	if channel, _, ok := strings.Cut(key, "|"); ok {
+		return SubscriptionChannel(channel)
 	}
-	return s
+	if channel, _, ok := strings.Cut(key, ":"); ok {
+		return SubscriptionChannel(channel)
+	}
+	return SubscriptionChannel(key)
 }
 
 func (ws *WebSocketClient) dispatchLocal(event string, data json.RawMessage) {
@@ -582,5 +596,67 @@ func (ws *WebSocketClient) dispatchLocal(event string, data json.RawMessage) {
 
 	for _, e := range entries {
 		e.fn(data)
+	}
+}
+
+func normalizeSubscriptionOptions(options SubscriptionOptions) SubscriptionOptions {
+	normalized := SubscriptionOptions{
+		MarketSlug:    options.MarketSlug,
+		MarketAddress: options.MarketAddress,
+	}
+
+	if len(options.MarketSlugs) > 0 {
+		normalized.MarketSlugs = append([]string(nil), options.MarketSlugs...)
+		sort.Strings(normalized.MarketSlugs)
+	}
+	if len(options.MarketAddresses) > 0 {
+		normalized.MarketAddresses = append([]string(nil), options.MarketAddresses...)
+		sort.Strings(normalized.MarketAddresses)
+	}
+	if len(options.Filters) > 0 {
+		normalized.Filters = normalizeFilterMap(options.Filters)
+	}
+
+	return normalized
+}
+
+func normalizeFilterMap(filters map[string]interface{}) map[string]interface{} {
+	normalized := make(map[string]interface{}, len(filters))
+	keys := make([]string, 0, len(filters))
+	for key := range filters {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		normalized[key] = normalizeFilterValue(filters[key])
+	}
+	return normalized
+}
+
+func normalizeFilterValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]any:
+		return normalizeFilterMap(v)
+	case []string:
+		out := append([]string(nil), v...)
+		sort.Strings(out)
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = normalizeFilterValue(item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func requiresWebSocketAuth(channel SubscriptionChannel) bool {
+	switch channel {
+	case ChannelOrders, ChannelFills, ChannelSubscribePositions, ChannelSubscribeTransactions:
+		return true
+	default:
+		return false
 	}
 }

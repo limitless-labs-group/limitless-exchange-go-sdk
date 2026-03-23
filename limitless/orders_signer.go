@@ -60,6 +60,10 @@ func (s *OrderSigner) Address() common.Address {
 
 // SignOrder signs an unsigned order with EIP-712 and returns the hex-encoded signature.
 func (s *OrderSigner) SignOrder(order *UnsignedOrder, config OrderSigningConfig) (string, error) {
+	if err := validateSigningConfig(config); err != nil {
+		return "", err
+	}
+
 	s.logger.Debug("Signing order with EIP-712", map[string]any{
 		"tokenId":           order.TokenID,
 		"side":              order.Side,
@@ -157,4 +161,20 @@ func (s *OrderSigner) SignOrder(order *UnsignedOrder, config OrderSigningConfig)
 // bigIntFromInt64 creates a big.Int from an int64. (unused but kept for reference)
 func bigIntFromInt64(v int64) *big.Int {
 	return new(big.Int).SetInt64(v)
+}
+
+func validateSigningConfig(config OrderSigningConfig) error {
+	if config.ChainID <= 0 {
+		return fmt.Errorf("invalid chain ID %d", config.ChainID)
+	}
+	if config.ContractAddress == "" {
+		return fmt.Errorf("verifying contract address is required")
+	}
+	if strings.EqualFold(config.ContractAddress, ZeroAddress) {
+		return fmt.Errorf("verifying contract address must not be the zero address")
+	}
+	if !common.IsHexAddress(config.ContractAddress) {
+		return fmt.Errorf("invalid verifying contract address: %s", config.ContractAddress)
+	}
+	return nil
 }

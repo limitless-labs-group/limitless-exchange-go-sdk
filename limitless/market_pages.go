@@ -170,7 +170,7 @@ func (f *MarketPageFetcher) GetMarkets(ctx context.Context, pageID string, param
 	}
 
 	queryString := query.Encode()
-	endpoint := "/market-pages/" + pageID + "/markets"
+	endpoint := "/market-pages/" + url.PathEscape(pageID) + "/markets"
 	if queryString != "" {
 		endpoint += "?" + queryString
 	}
@@ -216,7 +216,7 @@ func (f *MarketPageFetcher) GetPropertyKeys(ctx context.Context) ([]PropertyKey,
 // GetPropertyKey fetches a single property key by ID.
 func (f *MarketPageFetcher) GetPropertyKey(ctx context.Context, id string) (*PropertyKey, error) {
 	var key PropertyKey
-	if err := f.client.Get(ctx, "/property-keys/"+id, &key); err != nil {
+	if err := f.client.Get(ctx, "/property-keys/"+url.PathEscape(id), &key); err != nil {
 		return nil, err
 	}
 	return &key, nil
@@ -224,7 +224,7 @@ func (f *MarketPageFetcher) GetPropertyKey(ctx context.Context, id string) (*Pro
 
 // GetPropertyOptions lists options for a property key, optionally filtered by parent option ID.
 func (f *MarketPageFetcher) GetPropertyOptions(ctx context.Context, keyID string, parentID *string) ([]PropertyOption, error) {
-	endpoint := "/property-keys/" + keyID + "/options"
+	endpoint := "/property-keys/" + url.PathEscape(keyID) + "/options"
 	if parentID != nil && *parentID != "" {
 		query := url.Values{}
 		query.Set("parentId", *parentID)

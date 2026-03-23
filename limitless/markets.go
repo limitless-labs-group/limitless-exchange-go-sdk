@@ -3,6 +3,7 @@ package limitless
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sync"
 )
 
@@ -42,20 +43,19 @@ func (f *MarketFetcher) GetActiveMarkets(ctx context.Context, params *ActiveMark
 	endpoint := "/markets/active"
 
 	if params != nil {
-		q := ""
-		sep := "?"
+		query := url.Values{}
 		if params.Limit > 0 {
-			q += fmt.Sprintf("%slimit=%d", sep, params.Limit)
-			sep = "&"
+			query.Set("limit", fmt.Sprintf("%d", params.Limit))
 		}
 		if params.Page > 0 {
-			q += fmt.Sprintf("%spage=%d", sep, params.Page)
-			sep = "&"
+			query.Set("page", fmt.Sprintf("%d", params.Page))
 		}
 		if params.SortBy != "" {
-			q += fmt.Sprintf("%ssortBy=%s", sep, string(params.SortBy))
+			query.Set("sortBy", string(params.SortBy))
 		}
-		endpoint += q
+		if encoded := query.Encode(); encoded != "" {
+			endpoint += "?" + encoded
+		}
 	}
 
 	f.logger.Debug("Fetching active markets")
@@ -84,7 +84,7 @@ func (f *MarketFetcher) GetMarket(ctx context.Context, slug string) (*Market, er
 	f.logger.Debug("Fetching market", map[string]any{"slug": slug})
 
 	var market Market
-	if err := f.client.Get(ctx, "/markets/"+slug, &market); err != nil {
+	if err := f.client.Get(ctx, "/markets/"+url.PathEscape(slug), &market); err != nil {
 		f.logger.Error("Failed to fetch market", err, map[string]any{"slug": slug})
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBo
 	f.logger.Debug("Fetching orderbook", map[string]any{"slug": slug})
 
 	var ob OrderBook
-	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/orderbook", slug), &ob); err != nil {
+	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/orderbook", url.PathEscape(slug)), &ob); err != nil {
 		f.logger.Error("Failed to fetch orderbook", err, map[string]any{"slug": slug})
 		return nil, err
 	}
@@ -149,10 +149,14 @@ func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBo
 // GetUserOrders fetches the authenticated user's orders for a specific market.
 // Requires an API key to be set on the HttpClient.
 func (f *MarketFetcher) GetUserOrders(ctx context.Context, slug string) ([]UserOrder, error) {
+	if err := f.client.requireAPIKey("GetUserOrders"); err != nil {
+		return nil, err
+	}
+
 	f.logger.Debug("Fetching user orders", map[string]any{"slug": slug})
 
 	var orders []UserOrder
-	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", slug), &orders); err != nil {
+	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", url.PathEscape(slug)), &orders); err != nil {
 		f.logger.Error("Failed to fetch user orders", err, map[string]any{"slug": slug})
 		return nil, err
 	}
@@ -166,6 +170,9 @@ func (f *MarketFetcher) GetUserOrders(ctx context.Context, slug string) ([]UserO
 }
 
 // GetUserOrders fetches the authenticated user's orders for this market.
+//
+// Deprecated: Prefer MarketFetcher.GetUserOrders or Client.Markets.GetUserOrders
+// to keep model values passive and avoid hidden client state.
 // The Market must have been obtained via MarketFetcher.GetMarket() or
 // MarketFetcher.GetActiveMarkets() so that the HTTP client is attached.
 func (m *Market) GetUserOrders(ctx context.Context) ([]UserOrder, error) {
@@ -175,9 +182,12 @@ func (m *Market) GetUserOrders(ctx context.Context) ([]UserOrder, error) {
 				"fetch the market via MarketFetcher.GetMarket() to use this method",
 		)
 	}
+	if err := m.client.requireAPIKey("Market.GetUserOrders"); err != nil {
+		return nil, err
+	}
 
 	var orders []UserOrder
-	if err := m.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", m.Slug), &orders); err != nil {
+	if err := m.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", url.PathEscape(m.Slug)), &orders); err != nil {
 		return nil, err
 	}
 

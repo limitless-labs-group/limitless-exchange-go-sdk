@@ -27,12 +27,12 @@ type MarketMetadata struct {
 
 // MarketSettings contains CLOB market settings.
 type MarketSettings struct {
-	MinSize      string          `json:"minSize"`
-	MaxSpread    json.Number     `json:"maxSpread"`
-	DailyReward  string          `json:"dailyReward"`
-	RewardsEpoch any             `json:"rewardsEpoch"`
-	C            any             `json:"c"`
-	RebateRate   json.Number     `json:"rebateRate,omitempty"`
+	MinSize      string      `json:"minSize"`
+	MaxSpread    json.Number `json:"maxSpread"`
+	DailyReward  string      `json:"dailyReward"`
+	RewardsEpoch any         `json:"rewardsEpoch"`
+	C            any         `json:"c"`
+	RebateRate   json.Number `json:"rebateRate,omitempty"`
 }
 
 // TradePrices contains buy/sell price data.
@@ -101,56 +101,56 @@ type Market struct {
 	client *HttpClient `json:"-"`
 
 	// Common fields
-	ID                  int              `json:"id"`
-	Slug                string           `json:"slug"`
-	Title               string           `json:"title"`
-	ProxyTitle          *string          `json:"proxyTitle"`
-	Description         string           `json:"description,omitempty"`
-	CollateralToken     CollateralToken  `json:"collateralToken"`
-	ExpirationDate      string           `json:"expirationDate"`
-	ExpirationTimestamp int64            `json:"expirationTimestamp"`
-	Expired             *bool            `json:"expired,omitempty"`
-	CreatedAt           string           `json:"createdAt"`
-	UpdatedAt           string           `json:"updatedAt"`
-	Categories          []string         `json:"categories"`
-	Status              string           `json:"status"`
-	Creator             MarketCreator    `json:"creator"`
-	Tags                []string         `json:"tags"`
-	TradeType           string           `json:"tradeType"`
-	MarketType          string           `json:"marketType"`
-	PriorityIndex       int              `json:"priorityIndex"`
-	Metadata            MarketMetadata   `json:"metadata"`
-	Volume              *string          `json:"volume,omitempty"`
-	VolumeFormatted     *string          `json:"volumeFormatted,omitempty"`
-	AutomationType      *string          `json:"automationType,omitempty"`
-	ImageURL            *string          `json:"imageUrl,omitempty"`
-	Trends              map[string]any   `json:"trends,omitempty"`
-	OpenInterest        *string          `json:"openInterest,omitempty"`
-	OpenInterestFmt     *string          `json:"openInterestFormatted,omitempty"`
-	Liquidity           *string          `json:"liquidity,omitempty"`
-	LiquidityFormatted  *string          `json:"liquidityFormatted,omitempty"`
-	PositionIDs         []string         `json:"positionIds,omitempty"`
+	ID                  int             `json:"id"`
+	Slug                string          `json:"slug"`
+	Title               string          `json:"title"`
+	ProxyTitle          *string         `json:"proxyTitle"`
+	Description         string          `json:"description,omitempty"`
+	CollateralToken     CollateralToken `json:"collateralToken"`
+	ExpirationDate      string          `json:"expirationDate"`
+	ExpirationTimestamp int64           `json:"expirationTimestamp"`
+	Expired             *bool           `json:"expired,omitempty"`
+	CreatedAt           string          `json:"createdAt"`
+	UpdatedAt           string          `json:"updatedAt"`
+	Categories          []string        `json:"categories"`
+	Status              string          `json:"status"`
+	Creator             MarketCreator   `json:"creator"`
+	Tags                []string        `json:"tags"`
+	TradeType           string          `json:"tradeType"`
+	MarketType          string          `json:"marketType"`
+	PriorityIndex       int             `json:"priorityIndex"`
+	Metadata            MarketMetadata  `json:"metadata"`
+	Volume              *string         `json:"volume,omitempty"`
+	VolumeFormatted     *string         `json:"volumeFormatted,omitempty"`
+	AutomationType      *string         `json:"automationType,omitempty"`
+	ImageURL            *string         `json:"imageUrl,omitempty"`
+	Trends              map[string]any  `json:"trends,omitempty"`
+	OpenInterest        *string         `json:"openInterest,omitempty"`
+	OpenInterestFmt     *string         `json:"openInterestFormatted,omitempty"`
+	Liquidity           *string         `json:"liquidity,omitempty"`
+	LiquidityFormatted  *string         `json:"liquidityFormatted,omitempty"`
+	PositionIDs         []string        `json:"positionIds,omitempty"`
 
 	// CLOB single market fields
-	ConditionID        *string              `json:"conditionId,omitempty"`
-	NegRiskRequestID   *string              `json:"negRiskRequestId,omitempty"`
-	Tokens             *MarketTokens        `json:"tokens,omitempty"`
-	Prices             []float64            `json:"prices,omitempty"`
-	TradePrices        *TradePrices         `json:"tradePrices,omitempty"`
-	IsRewardable       *bool                `json:"isRewardable,omitempty"`
-	Settings           *MarketSettings      `json:"settings,omitempty"`
-	Venue              *Venue               `json:"venue,omitempty"`
-	Logo               *string              `json:"logo,omitempty"`
-	PriceOracleData    *PriceOracleMetadata `json:"priceOracleMetadata,omitempty"`
-	OrderInGroup       *int                 `json:"orderInGroup,omitempty"`
-	WinningOutcomeIdx  *int                 `json:"winningOutcomeIndex,omitempty"`
+	ConditionID       *string              `json:"conditionId,omitempty"`
+	NegRiskRequestID  *string              `json:"negRiskRequestId,omitempty"`
+	Tokens            *MarketTokens        `json:"tokens,omitempty"`
+	Prices            []float64            `json:"prices,omitempty"`
+	TradePrices       *TradePrices         `json:"tradePrices,omitempty"`
+	IsRewardable      *bool                `json:"isRewardable,omitempty"`
+	Settings          *MarketSettings      `json:"settings,omitempty"`
+	Venue             *Venue               `json:"venue,omitempty"`
+	Logo              *string              `json:"logo,omitempty"`
+	PriceOracleData   *PriceOracleMetadata `json:"priceOracleMetadata,omitempty"`
+	OrderInGroup      *int                 `json:"orderInGroup,omitempty"`
+	WinningOutcomeIdx *int                 `json:"winningOutcomeIndex,omitempty"`
 
 	// NegRisk group market fields
-	OutcomeTokens   []string  `json:"outcomeTokens,omitempty"`
-	OgImageURI      *string   `json:"ogImageURI,omitempty"`
-	NegRiskMarketID *string   `json:"negRiskMarketId,omitempty"`
-	Markets         []Market  `json:"markets,omitempty"`
-	DailyReward     *string   `json:"dailyReward,omitempty"`
+	OutcomeTokens   []string `json:"outcomeTokens,omitempty"`
+	OgImageURI      *string  `json:"ogImageURI,omitempty"`
+	NegRiskMarketID *string  `json:"negRiskMarketId,omitempty"`
+	Markets         []Market `json:"markets,omitempty"`
+	DailyReward     *string  `json:"dailyReward,omitempty"`
 
 	// Legacy fields
 	Address        *string         `json:"address,omitempty"`
@@ -161,26 +161,26 @@ type Market struct {
 
 // UserOrder represents an order returned by the user-orders endpoint.
 type UserOrder struct {
-	ID            string          `json:"id"`
-	CreatedAt     string          `json:"createdAt"`
-	MakerAmount   json.Number     `json:"makerAmount"`
-	TakerAmount   json.Number     `json:"takerAmount"`
-	Expiration    *string         `json:"expiration"`
-	SignatureType int             `json:"signatureType"`
-	Salt          json.Number     `json:"salt"`
-	Maker         string          `json:"maker"`
-	Signer        string          `json:"signer"`
-	Taker         string          `json:"taker"`
-	TokenID       string          `json:"tokenId"`
-	Side          json.Number     `json:"side"`
-	FeeRateBps    int             `json:"feeRateBps"`
-	Nonce         int             `json:"nonce"`
-	Signature     string          `json:"signature"`
-	OrderType     string          `json:"orderType"`
-	Price         *float64        `json:"price"`
-	MarketID      int             `json:"marketId"`
-	Status        string          `json:"status,omitempty"`
-	FilledSize    json.Number     `json:"filledSize,omitempty"`
+	ID            string      `json:"id"`
+	CreatedAt     string      `json:"createdAt"`
+	MakerAmount   json.Number `json:"makerAmount"`
+	TakerAmount   json.Number `json:"takerAmount"`
+	Expiration    *string     `json:"expiration"`
+	SignatureType int         `json:"signatureType"`
+	Salt          json.Number `json:"salt"`
+	Maker         string      `json:"maker"`
+	Signer        string      `json:"signer"`
+	Taker         string      `json:"taker"`
+	TokenID       string      `json:"tokenId"`
+	Side          json.Number `json:"side"`
+	FeeRateBps    int         `json:"feeRateBps"`
+	Nonce         int         `json:"nonce"`
+	Signature     string      `json:"signature"`
+	OrderType     string      `json:"orderType"`
+	Price         *float64    `json:"price"`
+	MarketID      int         `json:"marketId"`
+	Status        string      `json:"status,omitempty"`
+	FilledSize    json.Number `json:"filledSize,omitempty"`
 }
 
 // ActiveMarketsSortBy constrains sort values for active markets.

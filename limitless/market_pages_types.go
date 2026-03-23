@@ -51,15 +51,15 @@ type MarketPage struct {
 
 // PropertyOption represents an option for a property key.
 type PropertyOption struct {
-	ID              string                 `json:"id"`
-	PropertyKeyID   string                 `json:"propertyKeyId"`
-	Value           string                 `json:"value"`
-	Label           string                 `json:"label"`
-	SortOrder       int                    `json:"sortOrder"`
-	ParentOptionID  *string                `json:"parentOptionId"`
-	Metadata        map[string]interface{} `json:"metadata"`
-	CreatedAt       string                 `json:"createdAt"`
-	UpdatedAt       string                 `json:"updatedAt"`
+	ID             string                 `json:"id"`
+	PropertyKeyID  string                 `json:"propertyKeyId"`
+	Value          string                 `json:"value"`
+	Label          string                 `json:"label"`
+	SortOrder      int                    `json:"sortOrder"`
+	ParentOptionID *string                `json:"parentOptionId"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	CreatedAt      string                 `json:"createdAt"`
+	UpdatedAt      string                 `json:"updatedAt"`
 }
 
 // PropertyKey represents a property key for market filtering.

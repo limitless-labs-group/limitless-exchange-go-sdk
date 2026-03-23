@@ -29,7 +29,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 - **Order Management**: Create, cancel, and manage orders on CLOB and NegRisk markets
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
-- **Error Handling & Retry**: Automatic retry logic for rate limits and transient failures
+- **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
 - **WebSocket**: Real-time orderbook, trade, position, and transaction streaming
 - **Market Pages & Navigation**: Navigation tree, path-based page resolution, property filters
 - **Portfolio**: Position tracking, user history, and profile access
@@ -41,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.3
 ```
 
-Requires Go 1.22 or later.
+Requires Go 1.24 or later.
 
 ## Quick Start
 
@@ -59,19 +59,18 @@ import (
 )
 
 func main() {
-    client := limitless.NewHttpClient()
-    fetcher := limitless.NewMarketFetcher(client)
+    sdk := limitless.NewClient()
     ctx := context.Background()
 
     // Fetch a single market
-    market, err := fetcher.GetMarket(ctx, "your-market-slug")
+    market, err := sdk.Markets.GetMarket(ctx, "your-market-slug")
     if err != nil {
         log.Fatal(err)
     }
     fmt.Printf("Market: %s\n", market.Title)
 
     // Fetch orderbook
-    ob, err := fetcher.GetOrderBook(ctx, market.Slug)
+    ob, err := sdk.Markets.GetOrderBook(ctx, market.Slug)
     if err != nil {
         log.Fatal(err)
     }
@@ -79,7 +78,7 @@ func main() {
         ob.AdjustedMidpoint, len(ob.Bids), len(ob.Asks))
 
     // Fetch active markets with sorting and pagination
-    resp, err := fetcher.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
+    resp, err := sdk.Markets.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
         Limit:  10,
         SortBy: limitless.SortByNewest,
     })
@@ -95,17 +94,15 @@ func main() {
 The SDK uses API keys for authentication. API keys can be obtained from your Limitless Exchange account settings (User Profile).
 
 ```go
-// Option 1: Automatic from environment variable (recommended)
-// Set LIMITLESS_API_KEY in your environment or .env file
-client := limitless.NewHttpClient()
-
-// Option 2: Explicit API key
-client := limitless.NewHttpClient(
-    limitless.WithAPIKey("your-api-key"),
+// Preferred: explicit API key
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
 )
 
 // All requests automatically include the X-API-Key header
 ```
+
+Legacy fallback: `NewHttpClient()` and `NewWebSocketClient()` still read `LIMITLESS_API_KEY` from the environment in `v1.x` for backward compatibility. Prefer `WithAPIKey(...)` explicitly. This fallback is scheduled for removal in `v1.0.5`.
 
 **Environment Variables:**
 
@@ -137,21 +134,17 @@ MARKET_SLUG=your-market-slug
 ### Placing a GTC (Limit) Order
 
 ```go
-client := limitless.NewHttpClient(
+sdk := limitless.NewClient(
     limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
 )
-fetcher := limitless.NewMarketFetcher(client)
 
 ctx := context.Background()
 
 // Fetch market for token IDs and venue
-market, _ := fetcher.GetMarket(ctx, "your-market-slug")
+market, _ := sdk.Markets.GetMarket(ctx, "your-market-slug")
 
 // Create order client with private key
-orderClient, _ := limitless.NewOrderClient(
-    client, os.Getenv("PRIVATE_KEY"),
-    limitless.WithOrderMarketFetcher(fetcher),
-)
+orderClient, _ := sdk.NewOrderClient(os.Getenv("PRIVATE_KEY"))
 
 // Place a GTC BUY order at 0.50 for 10 shares
 resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
@@ -215,8 +208,10 @@ msg, err := orderClient.CancelAll(ctx, "market-slug")
 ### WebSocket (Real-Time Streaming)
 
 ```go
-ws := limitless.NewWebSocketClient(
-    limitless.WithWebSocketAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+)
+ws := sdk.NewWebSocketClient(
     limitless.WithAutoReconnect(true),
 )
 
@@ -258,51 +253,55 @@ ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
 ### Portfolio & Profile
 
 ```go
-pf := limitless.NewPortfolioFetcher(client)
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+)
 
 // Fetch user profile
-profile, _ := pf.GetProfile(ctx, "0xYourWalletAddress")
+profile, _ := sdk.Portfolio.GetProfile(ctx, "0xYourWalletAddress")
 
 // Fetch positions
-positions, _ := pf.GetPositions(ctx)
+positions, _ := sdk.Portfolio.GetPositions(ctx)
 fmt.Printf("CLOB: %d positions | AMM: %d positions\n",
     len(positions.CLOB), len(positions.AMM))
 
 // Fetch user history
-history, _ := pf.GetUserHistory(ctx, 1, 10)
+history, _ := sdk.Portfolio.GetUserHistory(ctx, 1, 10)
 ```
 
-### User Orders (Fluent API)
+### User Orders
 
 ```go
-// Via MarketFetcher
-orders, _ := fetcher.GetUserOrders(ctx, "market-slug")
+// Prefer the service API
+orders, _ := sdk.Markets.GetUserOrders(ctx, "market-slug")
 
-// Or via Market instance (fluent API)
-market, _ := fetcher.GetMarket(ctx, "market-slug")
+// Legacy fluent API remains available for backward compatibility
+market, _ := sdk.Markets.GetMarket(ctx, "market-slug")
 orders, _ := market.GetUserOrders(ctx)
 ```
 
 ### Market Pages & Navigation
 
 ```go
-pageFetcher := limitless.NewMarketPageFetcher(client)
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+)
 
 // Get navigation tree
-nav, _ := pageFetcher.GetNavigation(ctx)
+nav, _ := sdk.Pages.GetNavigation(ctx)
 
 // Resolve a page by URL path (handles 301 redirects)
-page, _ := pageFetcher.GetMarketPageByPath(ctx, "/crypto")
+page, _ := sdk.Pages.GetMarketPageByPath(ctx, "/crypto")
 
 // Fetch markets for a page with filters
-markets, _ := pageFetcher.GetMarkets(ctx, page.ID, &limitless.MarketPageMarketsParams{
+markets, _ := sdk.Pages.GetMarkets(ctx, page.ID, &limitless.MarketPageMarketsParams{
     Limit: intPtr(20),
     Sort:  "-updatedAt",
 })
 
 // Browse filter options
-keys, _ := pageFetcher.GetPropertyKeys(ctx)
-options, _ := pageFetcher.GetPropertyOptions(ctx, keys[0].ID, nil)
+keys, _ := sdk.Pages.GetPropertyKeys(ctx)
+options, _ := sdk.Pages.GetPropertyOptions(ctx, keys[0].ID, nil)
 ```
 
 ### Error Handling & Retry
@@ -344,7 +343,7 @@ result, err := limitless.WithRetry(ctx, func() (*Response, error) {
 // Console logger with configurable level
 logger := limitless.NewConsoleLogger(limitless.LogLevelDebug)
 
-client := limitless.NewHttpClient(
+sdk := limitless.NewClient(
     limitless.WithLogger(logger),
 )
 

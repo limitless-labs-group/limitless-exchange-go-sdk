@@ -3,7 +3,9 @@ package limitless
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestWebSocketClient_Subscribe_AuthValidation(t *testing.T) {
@@ -112,18 +114,127 @@ func TestWebSocketClient_SubscriptionKeyHelpers(t *testing.T) {
 	t.Parallel()
 
 	ws := NewWebSocketClient()
-	key := ws.subscriptionKey(ChannelSubscribeMarketPrices, SubscriptionOptions{MarketSlug: "btc"})
-	if key != "subscribe_market_prices:btc" {
-		t.Fatalf("unexpected subscription key: %s", key)
+	key := ws.subscriptionKey(ChannelSubscribeMarketPrices, SubscriptionOptions{
+		MarketSlugs: []string{"eth", "btc"},
+	})
+	reorderedKey := ws.subscriptionKey(ChannelSubscribeMarketPrices, SubscriptionOptions{
+		MarketSlugs: []string{"btc", "eth"},
+	})
+	if key != reorderedKey {
+		t.Fatalf("expected subscription key to be order-independent, got %s vs %s", key, reorderedKey)
 	}
 
-	globalKey := ws.subscriptionKey(ChannelSubscribeMarketPrices, SubscriptionOptions{})
-	if globalKey != "subscribe_market_prices:global" {
-		t.Fatalf("unexpected global subscription key: %s", globalKey)
+	channel := ws.channelFromKey(key)
+	if channel != ChannelSubscribePositions {
+		channel = ws.channelFromKey("subscribe_positions:btc")
 	}
-
-	channel := ws.channelFromKey("subscribe_positions:btc")
 	if channel != ChannelSubscribePositions {
 		t.Fatalf("expected subscribe_positions channel, got %s", channel)
 	}
+}
+
+func TestWebSocketClient_Off_RemovesSocketHandlerAfterInternalHandlers(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient(WithAutoReconnect(false))
+	ws.sio = &socketIOClient{
+		namespace: "/markets",
+		handlers:  map[string][]handlerEntry{},
+		done:      make(chan struct{}),
+		ackChans:  map[int]chan json.RawMessage{},
+		logger:    NewNoOpLogger(),
+	}
+	ws.state = StateConnected
+	ws.setupInternalHandlers()
+
+	count := 0
+	id := ws.On("trade", func(data json.RawMessage) {
+		count++
+	})
+	ws.Off("trade", id)
+	ws.sio.dispatchEvent("trade", json.RawMessage(`{}`))
+	if count != 0 {
+		t.Fatalf("expected trade handler to be removed, got count=%d", count)
+	}
+}
+
+func TestWebSocketClient_SetAPIKey_ReconnectPreservesDistinctSubscriptions(t *testing.T) {
+	oldFactory := socketIOClientFactory
+	defer func() {
+		socketIOClientFactory = oldFactory
+	}()
+
+	var reconnectEmits int32
+	nextSIO := &socketIOClient{
+		namespace: "/markets",
+		handlers:  map[string][]handlerEntry{},
+		done:      make(chan struct{}),
+		ackChans:  map[int]chan json.RawMessage{},
+		logger:    NewNoOpLogger(),
+		emitHook: func(event string, data interface{}) error {
+			atomic.AddInt32(&reconnectEmits, 1)
+			return nil
+		},
+	}
+	socketIOClientFactory = func(wsURL, namespace string, apiKey string, logger Logger) (*socketIOClient, error) {
+		if apiKey != "new-key" {
+			t.Fatalf("expected reconnect to use new API key, got %q", apiKey)
+		}
+		return nextSIO, nil
+	}
+
+	ws := NewWebSocketClient(WithWebSocketAPIKey("old-key"), WithAutoReconnect(false))
+	ws.sio = &socketIOClient{
+		namespace: "/markets",
+		handlers:  map[string][]handlerEntry{},
+		done:      make(chan struct{}),
+		ackChans:  map[int]chan json.RawMessage{},
+		logger:    NewNoOpLogger(),
+		emitHook: func(event string, data interface{}) error {
+			return nil
+		},
+		closeHook: func() error {
+			return nil
+		},
+	}
+	ws.state = StateConnected
+
+	if err := ws.Subscribe(context.Background(), ChannelSubscribeMarketPrices, SubscriptionOptions{
+		MarketSlugs: []string{"btc", "eth"},
+	}); err != nil {
+		t.Fatalf("Subscribe #1 returned error: %v", err)
+	}
+	if err := ws.Subscribe(context.Background(), ChannelSubscribeMarketPrices, SubscriptionOptions{
+		MarketAddresses: []string{"0x2", "0x1"},
+		Filters: map[string]interface{}{
+			"side": "BUY",
+		},
+	}); err != nil {
+		t.Fatalf("Subscribe #2 returned error: %v", err)
+	}
+
+	ws.mu.RLock()
+	if got := len(ws.subscriptions); got != 2 {
+		ws.mu.RUnlock()
+		t.Fatalf("expected two distinct subscriptions before reconnect, got %d", got)
+	}
+	ws.mu.RUnlock()
+
+	ws.SetAPIKey("new-key")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ws.IsConnected() && atomic.LoadInt32(&reconnectEmits) == 2 {
+			ws.mu.RLock()
+			subCount := len(ws.subscriptions)
+			ws.mu.RUnlock()
+			if subCount != 2 {
+				t.Fatalf("expected subscriptions to be preserved after reconnect, got %d", subCount)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("timed out waiting for reconnect and resubscribe, emits=%d state=%s", atomic.LoadInt32(&reconnectEmits), ws.State())
 }

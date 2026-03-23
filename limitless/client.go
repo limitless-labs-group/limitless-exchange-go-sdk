@@ -69,14 +69,14 @@ func NewHttpClient(opts ...ClientOption) *HttpClient {
 		opt(c)
 	}
 
-	// Auto-load API key from environment if not set
+	// Legacy fallback for v1 compatibility. Prefer WithAPIKey in application code.
 	if c.apiKey == "" {
 		c.apiKey = os.Getenv("LIMITLESS_API_KEY")
 	}
 
 	if c.apiKey == "" {
 		c.logger.Warn("API key not set. Authenticated endpoints will fail. " +
-			"Set LIMITLESS_API_KEY environment variable or pass WithAPIKey option.")
+			"Pass WithAPIKey(...) explicitly or set LIMITLESS_API_KEY (legacy fallback, scheduled for removal in v1.0.5).")
 	}
 
 	c.logger.Debug("HTTP client initialized", map[string]any{
@@ -99,6 +99,16 @@ func (c *HttpClient) ClearAPIKey() {
 // APIKey returns the current API key.
 func (c *HttpClient) APIKey() string {
 	return c.apiKey
+}
+
+func (c *HttpClient) requireAPIKey(operation string) error {
+	if c.apiKey != "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"API key is required for %s; pass WithAPIKey(...) when creating the client or set LIMITLESS_API_KEY (legacy fallback, scheduled for removal in v1.0.5)",
+		operation,
+	)
 }
 
 // Get performs a GET request and decodes the response into result.

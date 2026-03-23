@@ -19,10 +19,11 @@ func main() {
 		log.Fatal("LIMITLESS_API_KEY environment variable is required for position subscriptions")
 	}
 
-	ws := limitless.NewWebSocketClient(
-		limitless.WithWebSocketAPIKey(apiKey),
-		limitless.WithWebSocketLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
+	sdk := limitless.NewClient(
+		limitless.WithAPIKey(apiKey),
+		limitless.WithLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
 	)
+	ws := sdk.NewWebSocketClient()
 
 	// Register event handlers
 	ws.On("positions", func(data json.RawMessage) {

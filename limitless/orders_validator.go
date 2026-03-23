@@ -2,8 +2,12 @@ package limitless
 
 import (
 	"fmt"
+	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/limitless-labs-group/limitless-exchange-go-sdk/internal/mathutil"
 )
 
 // OrderValidationError represents a client-side order validation error.
@@ -23,69 +27,157 @@ var numericRegex = regexp.MustCompile(`^\d+$`)
 
 // ValidateOrderArgs validates order arguments before building.
 func ValidateOrderArgs(args OrderArgs) error {
+	return validateOrderArgs(args, 0.001)
+}
+
+func validateOrderArgs(args OrderArgs, priceTick float64) error {
 	switch a := args.(type) {
 	case FOKOrderArgs:
-		if a.TokenID == "" {
-			return &OrderValidationError{Field: "tokenId", Message: "tokenId is required"}
-		}
-		if a.TokenID == "0" {
-			return &OrderValidationError{Field: "tokenId", Message: "tokenId cannot be zero"}
-		}
-		if !numericRegex.MatchString(a.TokenID) {
-			return &OrderValidationError{Field: "tokenId", Message: fmt.Sprintf("invalid tokenId format: %s", a.TokenID)}
+		if err := validateTokenID(a.TokenID); err != nil {
+			return err
 		}
 		if a.MakerAmount <= 0 {
 			return &OrderValidationError{Field: "makerAmount", Message: fmt.Sprintf("amount must be positive, got: %v", a.MakerAmount)}
 		}
-		// Validate max 2 decimal places
-		amountStr := fmt.Sprintf("%v", a.MakerAmount)
-		if idx := strings.Index(amountStr, "."); idx != -1 {
-			decPlaces := len(amountStr) - idx - 1
-			if decPlaces > 2 {
-				return &OrderValidationError{
-					Field:   "makerAmount",
-					Message: fmt.Sprintf("amount must have max 2 decimal places, got: %v (%d decimals)", a.MakerAmount, decPlaces),
-				}
+		if decimals := decimalPlaces(a.MakerAmount); decimals > 6 {
+			return &OrderValidationError{
+				Field:   "makerAmount",
+				Message: fmt.Sprintf("amount must have max 6 decimal places, got: %v (%d decimals)", a.MakerAmount, decimals),
 			}
 		}
-		if a.Taker != "" && !isValidAddress(a.Taker) {
-			return &OrderValidationError{Field: "taker", Message: fmt.Sprintf("invalid taker address: %s", a.Taker)}
-		}
-		if a.Expiration != "" && !numericRegex.MatchString(a.Expiration) {
-			return &OrderValidationError{Field: "expiration", Message: fmt.Sprintf("invalid expiration format: %s", a.Expiration)}
-		}
-		if a.Nonce != nil && *a.Nonce < 0 {
-			return &OrderValidationError{Field: "nonce", Message: fmt.Sprintf("invalid nonce: %d", *a.Nonce)}
+		if err := validateOptionalOrderFields(a.Taker, a.Expiration, a.Nonce); err != nil {
+			return err
 		}
 
 	case GTCOrderArgs:
-		if a.TokenID == "" {
-			return &OrderValidationError{Field: "tokenId", Message: "tokenId is required"}
+		if err := validateTokenID(a.TokenID); err != nil {
+			return err
 		}
-		if a.TokenID == "0" {
-			return &OrderValidationError{Field: "tokenId", Message: "tokenId cannot be zero"}
-		}
-		if !numericRegex.MatchString(a.TokenID) {
-			return &OrderValidationError{Field: "tokenId", Message: fmt.Sprintf("invalid tokenId format: %s", a.TokenID)}
-		}
-		if a.Price < 0 || a.Price > 1 {
+		if a.Price <= 0 || a.Price > 1 {
 			return &OrderValidationError{Field: "price", Message: fmt.Sprintf("price must be between 0 and 1, got: %v", a.Price)}
 		}
 		if a.Size <= 0 {
 			return &OrderValidationError{Field: "size", Message: fmt.Sprintf("size must be positive, got: %v", a.Size)}
 		}
-		if a.Taker != "" && !isValidAddress(a.Taker) {
-			return &OrderValidationError{Field: "taker", Message: fmt.Sprintf("invalid taker address: %s", a.Taker)}
+
+		maxPriceDecimals := decimalPlaces(priceTick)
+		if decimals := decimalPlaces(a.Price); decimals > maxPriceDecimals {
+			return &OrderValidationError{
+				Field:   "price",
+				Message: fmt.Sprintf("price must have max %d decimal places, got: %v (%d decimals)", maxPriceDecimals, a.Price, decimals),
+			}
 		}
-		if a.Expiration != "" && !numericRegex.MatchString(a.Expiration) {
-			return &OrderValidationError{Field: "expiration", Message: fmt.Sprintf("invalid expiration format: %s", a.Expiration)}
+		if decimals := decimalPlaces(a.Size); decimals > 6 {
+			return &OrderValidationError{
+				Field:   "size",
+				Message: fmt.Sprintf("size must have max 6 decimal places, got: %v (%d decimals)", a.Size, decimals),
+			}
 		}
-		if a.Nonce != nil && *a.Nonce < 0 {
-			return &OrderValidationError{Field: "nonce", Message: fmt.Sprintf("invalid nonce: %d", *a.Nonce)}
+
+		scale := mathutil.Scale6
+		priceInt := mathutil.ParseDecToInt(strconv.FormatFloat(a.Price, 'f', -1, 64), scale)
+		tickInt := mathutil.ParseDecToInt(strconv.FormatFloat(priceTick, 'f', -1, 64), scale)
+		if tickInt.Sign() <= 0 {
+			return &OrderValidationError{Field: "price", Message: fmt.Sprintf("invalid priceTick: %v", priceTick)}
+		}
+		if new(big.Int).Mod(priceInt, tickInt).Sign() != 0 {
+			return &OrderValidationError{
+				Field:   "price",
+				Message: fmt.Sprintf("price %v is not tick-aligned. Must be multiple of %v (e.g., 0.380, 0.381, etc.)", a.Price, priceTick),
+			}
+		}
+
+		shares := mathutil.ParseDecToInt(strconv.FormatFloat(a.Size, 'f', -1, 64), scale)
+		sharesStep := new(big.Int).Div(scale, tickInt)
+		if new(big.Int).Mod(shares, sharesStep).Sign() != 0 {
+			validDown := new(big.Int).Div(new(big.Int).Set(shares), sharesStep)
+			validDown.Mul(validDown, sharesStep)
+			validUp, err := mathutil.DivCeil(shares, sharesStep)
+			if err != nil {
+				return &OrderValidationError{Field: "size", Message: fmt.Sprintf("failed to calculate valid size: %v", err)}
+			}
+			validUp.Mul(validUp, sharesStep)
+
+			return &OrderValidationError{
+				Field: "size",
+				Message: fmt.Sprintf(
+					"invalid size: %v. Size must produce contracts divisible by %s (sharesStep). Try %s (rounded down) or %s (rounded up) instead",
+					a.Size, sharesStep.String(), formatScaledBigInt(validDown, 6), formatScaledBigInt(validUp, 6),
+				),
+			}
+		}
+
+		if err := validateOptionalOrderFields(a.Taker, a.Expiration, a.Nonce); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func validateTokenID(tokenID string) error {
+	if tokenID == "" {
+		return &OrderValidationError{Field: "tokenId", Message: "tokenId is required"}
+	}
+	if tokenID == "0" {
+		return &OrderValidationError{Field: "tokenId", Message: "tokenId cannot be zero"}
+	}
+	if !numericRegex.MatchString(tokenID) {
+		return &OrderValidationError{Field: "tokenId", Message: fmt.Sprintf("invalid tokenId format: %s", tokenID)}
+	}
+	return nil
+}
+
+func validateOptionalOrderFields(taker, expiration string, nonce *int) error {
+	if taker != "" && !isValidAddress(taker) {
+		return &OrderValidationError{Field: "taker", Message: fmt.Sprintf("invalid taker address: %s", taker)}
+	}
+	if expiration != "" && !numericRegex.MatchString(expiration) {
+		return &OrderValidationError{Field: "expiration", Message: fmt.Sprintf("invalid expiration format: %s", expiration)}
+	}
+	if nonce != nil && *nonce < 0 {
+		return &OrderValidationError{Field: "nonce", Message: fmt.Sprintf("invalid nonce: %d", *nonce)}
+	}
+	return nil
+}
+
+func decimalPlaces(value float64) int {
+	formatted := strconv.FormatFloat(value, 'f', -1, 64)
+	if idx := strings.Index(formatted, "."); idx != -1 {
+		return len(formatted) - idx - 1
+	}
+	return 0
+}
+
+func formatScaledBigInt(value *big.Int, decimals int) string {
+	if value == nil {
+		return "0"
+	}
+
+	abs := new(big.Int).Set(value)
+	sign := ""
+	if abs.Sign() < 0 {
+		sign = "-"
+		abs.Abs(abs)
+	}
+
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	intPart := new(big.Int).Div(new(big.Int).Set(abs), scale)
+	fracPart := new(big.Int).Mod(new(big.Int).Set(abs), scale)
+	if fracPart.Sign() == 0 {
+		return sign + intPart.String()
+	}
+
+	frac := fracPart.String()
+	if len(frac) < decimals {
+		frac = strings.Repeat("0", decimals-len(frac)) + frac
+	}
+	frac = strings.TrimRight(frac, "0")
+	if frac == "" {
+		return sign + intPart.String()
+	}
+
+	return sign + intPart.String() + "." + frac
 }
 
 // ValidateUnsignedOrder validates an unsigned order.

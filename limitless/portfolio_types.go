@@ -21,8 +21,8 @@ type ReferralData struct {
 // UserProfile represents a user profile from the API (1:1 with API response).
 type UserProfile struct {
 	// Core fields
-	ID      int    `json:"id"`
-	Account string `json:"account"`
+	ID      int       `json:"id"`
+	Account string    `json:"account"`
 	Rank    *UserRank `json:"rank,omitempty"`
 
 	// Profile information
@@ -140,11 +140,11 @@ type AMMPosition struct {
 
 // PortfolioRewards contains rewards information in portfolio response.
 type PortfolioRewards struct {
-	TodaysRewards              string            `json:"todaysRewards"`
-	RewardsByEpoch             []json.RawMessage `json:"rewardsByEpoch"`
-	RewardsChartData           []json.RawMessage `json:"rewardsChartData"`
-	TotalUnpaidRewards         string            `json:"totalUnpaidRewards"`
-	TotalUserRewardsLastEpoch  string            `json:"totalUserRewardsLastEpoch"`
+	TodaysRewards             string            `json:"todaysRewards"`
+	RewardsByEpoch            []json.RawMessage `json:"rewardsByEpoch"`
+	RewardsChartData          []json.RawMessage `json:"rewardsChartData"`
+	TotalUnpaidRewards        string            `json:"totalUnpaidRewards"`
+	TotalUserRewardsLastEpoch string            `json:"totalUserRewardsLastEpoch"`
 }
 
 // PortfolioPositionsResponse is the API response for /portfolio/positions.

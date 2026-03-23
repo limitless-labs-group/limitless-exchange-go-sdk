@@ -12,10 +12,12 @@ import (
 )
 
 func main() {
-	// No API key needed for public subscriptions
-	ws := limitless.NewWebSocketClient(
-		limitless.WithWebSocketLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
+	sdk := limitless.NewClient(
+		limitless.WithLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
 	)
+
+	// No API key needed for public subscriptions
+	ws := sdk.NewWebSocketClient()
 
 	// Register event handler before connecting
 	ws.OnOrderbookUpdate(func(update limitless.OrderbookUpdate) {

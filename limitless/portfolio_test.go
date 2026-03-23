@@ -29,7 +29,7 @@ func TestPortfolioFetcher_GetProfile(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := NewHttpClient(WithBaseURL(srv.URL))
+	client := NewHttpClient(WithBaseURL(srv.URL), WithAPIKey("test-key"))
 	fetcher := NewPortfolioFetcher(client)
 
 	profile, err := fetcher.GetProfile(context.Background(), address)
@@ -59,7 +59,7 @@ func TestPortfolioFetcher_GetPositionsAndSlices(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := NewHttpClient(WithBaseURL(srv.URL))
+	client := NewHttpClient(WithBaseURL(srv.URL), WithAPIKey("test-key"))
 	fetcher := NewPortfolioFetcher(client)
 
 	resp, err := fetcher.GetPositions(context.Background())
@@ -105,11 +105,28 @@ func TestPortfolioFetcher_GetUserHistory_DefaultPagination(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := NewHttpClient(WithBaseURL(srv.URL))
+	client := NewHttpClient(WithBaseURL(srv.URL), WithAPIKey("test-key"))
 	fetcher := NewPortfolioFetcher(client)
 
 	_, err := fetcher.GetUserHistory(context.Background(), 0, 0)
 	if err != nil {
 		t.Fatalf("GetUserHistory returned error: %v", err)
+	}
+}
+
+func TestPortfolioFetcher_AuthenticatedMethods_RequireAPIKey(t *testing.T) {
+	t.Parallel()
+
+	client := NewHttpClient(WithBaseURL("https://example.com"))
+	fetcher := NewPortfolioFetcher(client)
+
+	if _, err := fetcher.GetProfile(context.Background(), "0xa00BCB04073B243E8A55f3B5899AefF596bF17C6"); err == nil {
+		t.Fatal("expected GetProfile to fail without API key")
+	}
+	if _, err := fetcher.GetPositions(context.Background()); err == nil {
+		t.Fatal("expected GetPositions to fail without API key")
+	}
+	if _, err := fetcher.GetUserHistory(context.Background(), 1, 10); err == nil {
+		t.Fatal("expected GetUserHistory to fail without API key")
 	}
 }

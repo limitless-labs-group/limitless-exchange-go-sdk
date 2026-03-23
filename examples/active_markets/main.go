@@ -9,13 +9,12 @@ import (
 )
 
 func main() {
-	client := limitless.NewHttpClient()
-	fetcher := limitless.NewMarketFetcher(client)
+	sdk := limitless.NewClient()
 
 	ctx := context.Background()
 
 	// Fetch active markets
-	resp, err := fetcher.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
+	resp, err := sdk.Markets.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
 		Limit:  5,
 		SortBy: "newest",
 	})

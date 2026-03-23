@@ -17,12 +17,12 @@ const (
 type SubscriptionChannel string
 
 const (
-	ChannelOrderbook            SubscriptionChannel = "orderbook"
-	ChannelTrades               SubscriptionChannel = "trades"
-	ChannelOrders               SubscriptionChannel = "orders"
-	ChannelFills                SubscriptionChannel = "fills"
-	ChannelMarkets              SubscriptionChannel = "markets"
-	ChannelPrices               SubscriptionChannel = "prices"
+	ChannelOrderbook             SubscriptionChannel = "orderbook"
+	ChannelTrades                SubscriptionChannel = "trades"
+	ChannelOrders                SubscriptionChannel = "orders"
+	ChannelFills                 SubscriptionChannel = "fills"
+	ChannelMarkets               SubscriptionChannel = "markets"
+	ChannelPrices                SubscriptionChannel = "prices"
 	ChannelSubscribeMarketPrices SubscriptionChannel = "subscribe_market_prices"
 	ChannelSubscribePositions    SubscriptionChannel = "subscribe_positions"
 	ChannelSubscribeTransactions SubscriptionChannel = "subscribe_transactions"
@@ -30,11 +30,11 @@ const (
 
 // SubscriptionOptions contains options for a WebSocket subscription.
 type SubscriptionOptions struct {
-	MarketSlug       string   `json:"marketSlug,omitempty"`
-	MarketSlugs      []string `json:"marketSlugs,omitempty"`
-	MarketAddress    string   `json:"marketAddress,omitempty"`
-	MarketAddresses  []string `json:"marketAddresses,omitempty"`
-	Filters          map[string]interface{} `json:"filters,omitempty"`
+	MarketSlug      string                 `json:"marketSlug,omitempty"`
+	MarketSlugs     []string               `json:"marketSlugs,omitempty"`
+	MarketAddress   string                 `json:"marketAddress,omitempty"`
+	MarketAddresses []string               `json:"marketAddresses,omitempty"`
+	Filters         map[string]interface{} `json:"filters,omitempty"`
 }
 
 // OrderbookData contains orderbook data within an update event.
@@ -49,8 +49,8 @@ type OrderbookData struct {
 
 // OrderbookUpdate is the orderbook update event from the WebSocket.
 type OrderbookUpdate struct {
-	MarketSlug string        `json:"marketSlug"`
-	Orderbook  OrderbookData `json:"orderbook"`
+	MarketSlug string          `json:"marketSlug"`
+	Orderbook  OrderbookData   `json:"orderbook"`
 	Timestamp  json.RawMessage `json:"timestamp"` // Can be string, number, or date
 }
 
@@ -66,14 +66,14 @@ type TradeEvent struct {
 
 // OrderUpdate is emitted when an order status changes.
 type OrderUpdate struct {
-	OrderID    string  `json:"orderId"`
-	MarketSlug string  `json:"marketSlug"`
-	Side       string  `json:"side"` // "BUY" or "SELL"
+	OrderID    string   `json:"orderId"`
+	MarketSlug string   `json:"marketSlug"`
+	Side       string   `json:"side"` // "BUY" or "SELL"
 	Price      *float64 `json:"price,omitempty"`
-	Size       float64 `json:"size"`
-	Filled     float64 `json:"filled"`
-	Status     string  `json:"status"` // "OPEN", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
-	Timestamp  float64 `json:"timestamp"`
+	Size       float64  `json:"size"`
+	Filled     float64  `json:"filled"`
+	Status     string   `json:"status"` // "OPEN", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
+	Timestamp  float64  `json:"timestamp"`
 }
 
 // FillEvent is emitted when an order is filled.

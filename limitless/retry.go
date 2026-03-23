@@ -3,7 +3,10 @@ package limitless
 import (
 	"context"
 	"errors"
+	"io"
 	"math"
+	"net"
+	neturl "net/url"
 	"time"
 )
 
@@ -66,6 +69,16 @@ func (rc *RetryConfig) delay(attempt int) time.Duration {
 }
 
 func (rc *RetryConfig) shouldRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if isRetryableTransportError(err) {
+		return true
+	}
+
 	codes := rc.StatusCodes
 	if len(codes) == 0 {
 		codes = []int{429, 500, 502, 503, 504}
@@ -106,6 +119,47 @@ func retryStatusCodeFromError(err error) (int, bool) {
 	}
 
 	return 0, false
+}
+
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var urlErr *neturl.Error
+	if errors.As(err, &urlErr) {
+		if urlErr.Err == nil {
+			return true
+		}
+		return isRetryableTransportError(urlErr.Err)
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return true
+		}
+		type temporary interface {
+			Temporary() bool
+		}
+		var tempErr temporary
+		if errors.As(err, &tempErr) && tempErr.Temporary() {
+			return true
+		}
+	}
+
+	return false
 }
 
 // WithRetry executes fn with retry logic based on the given config.
