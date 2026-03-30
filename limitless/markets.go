@@ -149,7 +149,7 @@ func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBo
 // GetUserOrders fetches the authenticated user's orders for a specific market.
 // Requires an API key to be set on the HttpClient.
 func (f *MarketFetcher) GetUserOrders(ctx context.Context, slug string) ([]UserOrder, error) {
-	if err := f.client.requireAPIKey("GetUserOrders"); err != nil {
+	if err := f.client.requireAuth("GetUserOrders"); err != nil {
 		return nil, err
 	}
 
@@ -182,7 +182,7 @@ func (m *Market) GetUserOrders(ctx context.Context) ([]UserOrder, error) {
 				"fetch the market via MarketFetcher.GetMarket() to use this method",
 		)
 	}
-	if err := m.client.requireAPIKey("Market.GetUserOrders"); err != nil {
+	if err := m.client.requireAuth("Market.GetUserOrders"); err != nil {
 		return nil, err
 	}
 

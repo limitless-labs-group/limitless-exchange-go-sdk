@@ -1,6 +1,6 @@
 # Limitless Exchange Go SDK
 
-**v1.0.3** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.4** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
@@ -25,8 +25,9 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 
 ## Features
 
-- **Authentication**: API key authentication with X-API-Key header
+- **Authentication**: Legacy API-key auth and new scoped API-key auth
 - **Order Management**: Create, cancel, and manage orders on CLOB and NegRisk markets
+- **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
 - **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
@@ -38,7 +39,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.3
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.4
 ```
 
 Requires Go 1.24 or later.
@@ -91,18 +92,27 @@ func main() {
 
 ### Authentication
 
-The SDK uses API keys for authentication. API keys can be obtained from your Limitless Exchange account settings (User Profile).
+The SDK supports two authenticated modes:
+
+- Legacy API keys via `X-API-Key`
+- New scoped API keys via HMAC headers (`lmts-api-key`, `lmts-timestamp`, `lmts-signature`)
 
 ```go
-// Preferred: explicit API key
+// Legacy API key
 sdk := limitless.NewClient(
     limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
 )
 
-// All requests automatically include the X-API-Key header
+// New scoped API key
+sdk := limitless.NewClient(
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
+)
 ```
 
-Legacy fallback: `NewHttpClient()` and `NewWebSocketClient()` still read `LIMITLESS_API_KEY` from the environment in `v1.x` for backward compatibility. Prefer `WithAPIKey(...)` explicitly. This fallback is scheduled for removal in `v1.0.5`.
+Environment auto-loading: `NewHttpClient()` and `NewWebSocketClient()` can read `LIMITLESS_API_KEY` from the environment when no explicit API key is provided. `WithAPIKey(...)` remains fully supported and is the clearest way to configure API-key auth in application code.
 
 **Environment Variables:**
 
@@ -112,11 +122,22 @@ Create a `.env` file:
 # Required for authenticated endpoints
 LIMITLESS_API_KEY=your_api_key_here
 
+# Optional: new scoped API-key auth
+LIMITLESS_API_TOKEN_ID=your_api_token_id
+LIMITLESS_API_TOKEN_SECRET=your_api_token_secret
+
+# Optional: Privy bootstrap for self-service partner capabilities / derive token
+LIMITLESS_IDENTITY_TOKEN=your_privy_identity_token
+
 # Required for order signing (EIP-712)
 PRIVATE_KEY=your_private_key_hex
 
 # Market to trade
 MARKET_SLUG=your-market-slug
+
+# Required for delegated order examples
+LIMITLESS_PARTNER_PROFILE_ID=12345
+LIMITLESS_TARGET_FEE_RATE_BPS=300
 ```
 
 ### Token Approvals
@@ -209,7 +230,10 @@ msg, err := orderClient.CancelAll(ctx, "market-slug")
 
 ```go
 sdk := limitless.NewClient(
-    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
 )
 ws := sdk.NewWebSocketClient(
     limitless.WithAutoReconnect(true),
@@ -234,6 +258,38 @@ defer ws.Disconnect()
 ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
     MarketSlugs: []string{"your-market-slug"},
 })
+```
+
+### Scoped API Keys & Delegated Orders
+
+```go
+sdk := limitless.NewClient(
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
+)
+
+// List active scoped API keys
+tokens, _ := sdk.ApiTokens.ListTokens(ctx)
+
+// Fetch partner capabilities with a Privy identity token
+capabilities, _ := sdk.ApiTokens.GetCapabilities(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"))
+
+// Place an order signed by the API on behalf of a partner-managed profile
+resp, _ := sdk.DelegatedOrders.CreateOrder(ctx, limitless.CreateDelegatedOrderParams{
+    MarketSlug: "your-market-slug",
+    OrderType:  limitless.OrderTypeGTC,
+    OnBehalfOf: 12345,
+    FeeRateBps: 300,
+    Args: limitless.GTCOrderArgs{
+        TokenID: "token-id",
+        Side:    limitless.SideBuy,
+        Price:   0.500,
+        Size:    10.0,
+    },
+})
+_ = resp
 ```
 
 **Available Channels:**
@@ -374,6 +430,8 @@ Runnable examples are available in the [`examples/`](./examples) directory:
 | [`clob_fok_order`](./examples/clob_fok_order) | Place a FOK (market) order | Yes |
 | [`negrisk_order`](./examples/negrisk_order) | Trade on NegRisk group markets | Yes |
 | [`portfolio`](./examples/portfolio) | Fetch profile, positions, and history | Yes |
+| [`api_tokens`](./examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
+| [`delegated_order`](./examples/delegated_order) | Place a delegated partner order | Scoped API key |
 | [`websocket_orderbook`](./examples/websocket_orderbook) | Stream live orderbook updates | No |
 | [`websocket_positions`](./examples/websocket_positions) | Stream position and transaction updates | Yes |
 
@@ -422,6 +480,8 @@ examples/
 ├── clob_fok_order/        # Place FOK market orders
 ├── negrisk_order/         # NegRisk group market trading
 ├── portfolio/             # Profile and position fetching
+├── api_tokens/            # Scoped API-key listing and capability lookup
+├── delegated_order/       # Delegated partner order placement
 ├── websocket_orderbook/   # Live orderbook streaming
 └── websocket_positions/   # Position and transaction streaming
 

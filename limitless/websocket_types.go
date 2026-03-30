@@ -1,6 +1,10 @@
 package limitless
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+)
 
 // WebSocketState represents the WebSocket connection state.
 type WebSocketState string
@@ -37,14 +41,39 @@ type SubscriptionOptions struct {
 	Filters         map[string]interface{} `json:"filters,omitempty"`
 }
 
+// flexFloat unmarshals a JSON value that may be either a number or a string containing a number.
+type flexFloat float64
+
+func (f *flexFloat) UnmarshalJSON(data []byte) error {
+	// Try number first
+	var n float64
+	if err := json.Unmarshal(data, &n); err == nil {
+		*f = flexFloat(n)
+		return nil
+	}
+	// Try quoted string
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return fmt.Errorf("flexFloat: cannot parse %q: %w", s, err)
+		}
+		*f = flexFloat(n)
+		return nil
+	}
+	return fmt.Errorf("flexFloat: cannot unmarshal %s", string(data))
+}
+
+func (f flexFloat) Float64() float64 { return float64(f) }
+
 // OrderbookData contains orderbook data within an update event.
 type OrderbookData struct {
 	Bids             []OrderBookEntry `json:"bids"`
 	Asks             []OrderBookEntry `json:"asks"`
 	TokenID          string           `json:"tokenId"`
 	AdjustedMidpoint float64          `json:"adjustedMidpoint"`
-	MaxSpread        float64          `json:"maxSpread"`
-	MinSize          float64          `json:"minSize"`
+	MaxSpread        flexFloat        `json:"maxSpread"`
+	MinSize          flexFloat        `json:"minSize"`
 }
 
 // OrderbookUpdate is the orderbook update event from the WebSocket.
@@ -133,6 +162,7 @@ type TransactionEvent struct {
 type WebSocketConfig struct {
 	URL                  string
 	APIKey               string
+	HMACCreds            *HMACCredentials
 	AutoReconnect        bool
 	ReconnectDelayMs     int
 	MaxReconnectAttempts int // 0 = infinite

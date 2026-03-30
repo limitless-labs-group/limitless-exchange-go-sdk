@@ -31,6 +31,16 @@ func WithAPIKey(key string) ClientOption {
 	}
 }
 
+// WithHMACCredentials sets HMAC credentials for authenticated requests.
+func WithHMACCredentials(creds HMACCredentials) ClientOption {
+	return func(c *HttpClient) {
+		c.hmacCreds = &HMACCredentials{
+			TokenID: creds.TokenID,
+			Secret:  creds.Secret,
+		}
+	}
+}
+
 // WithLogger sets the logger for the HTTP client.
 func WithLogger(l Logger) ClientOption {
 	return func(c *HttpClient) {

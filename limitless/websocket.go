@@ -50,6 +50,16 @@ func WithWebSocketAPIKey(key string) WebSocketOption {
 	}
 }
 
+// WithWebSocketHMACCredentials sets HMAC credentials for authenticated subscriptions.
+func WithWebSocketHMACCredentials(creds HMACCredentials) WebSocketOption {
+	return func(ws *WebSocketClient) {
+		ws.config.HMACCreds = &HMACCredentials{
+			TokenID: creds.TokenID,
+			Secret:  creds.Secret,
+		}
+	}
+}
+
 // WithAutoReconnect enables or disables auto-reconnect.
 func WithAutoReconnect(enabled bool) WebSocketOption {
 	return func(ws *WebSocketClient) {
@@ -91,6 +101,7 @@ func NewWebSocketClient(opts ...WebSocketOption) *WebSocketClient {
 		config: WebSocketConfig{
 			URL:                  DefaultWSURL,
 			APIKey:               os.Getenv("LIMITLESS_API_KEY"),
+			HMACCreds:            nil,
 			AutoReconnect:        true,
 			ReconnectDelayMs:     1000,
 			MaxReconnectAttempts: 0,
@@ -139,6 +150,25 @@ func (ws *WebSocketClient) SetAPIKey(key string) {
 	}
 }
 
+// SetHMACCredentials sets HMAC credentials. If already connected, reconnects with new auth.
+func (ws *WebSocketClient) SetHMACCredentials(creds HMACCredentials) {
+	ws.mu.Lock()
+	ws.config.HMACCreds = &HMACCredentials{
+		TokenID: creds.TokenID,
+		Secret:  creds.Secret,
+	}
+	connected := ws.state == StateConnected && ws.sio != nil
+	ws.mu.Unlock()
+
+	if connected {
+		ws.logger.Info("HMAC credentials updated, reconnecting...")
+		go func() {
+			ws.Disconnect()
+			_ = ws.Connect(context.Background())
+		}()
+	}
+}
+
 // Connect establishes a WebSocket connection.
 func (ws *WebSocketClient) Connect(ctx context.Context) error {
 	ws.mu.Lock()
@@ -161,7 +191,7 @@ func (ws *WebSocketClient) Connect(ctx context.Context) error {
 	ch := make(chan connectResult, 1)
 
 	go func() {
-		sio, err := socketIOClientFactory(config.URL, "/markets", config.APIKey, ws.logger)
+		sio, err := socketIOClientFactory(config.URL, "/markets", config.APIKey, config.HMACCreds, ws.logger)
 		ch <- connectResult{sio, err}
 	}()
 
@@ -237,10 +267,10 @@ func (ws *WebSocketClient) Subscribe(ctx context.Context, channel SubscriptionCh
 	}
 
 	// Check auth requirement
-	if requiresWebSocketAuth(channel) && ws.config.APIKey == "" {
+	if requiresWebSocketAuth(channel) && ws.config.APIKey == "" && ws.config.HMACCreds == nil {
 		return fmt.Errorf(
-			"API key is required for '%s' subscription. "+
-				"Please provide an API key via WithWebSocketAPIKey or set LIMITLESS_API_KEY (legacy fallback, scheduled for removal in v1.0.5)",
+			"authentication is required for '%s' subscription. "+
+				"Please provide WithWebSocketAPIKey(...) or WithWebSocketHMACCredentials(...), or set LIMITLESS_API_KEY for environment-based auto-loading",
 			channel,
 		)
 	}

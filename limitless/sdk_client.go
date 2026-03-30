@@ -5,10 +5,13 @@ import "fmt"
 // Client is the idiomatic top-level SDK entrypoint.
 // It wires a shared HTTP client into the domain services.
 type Client struct {
-	HTTP      *HttpClient
-	Markets   *MarketFetcher
-	Portfolio *PortfolioFetcher
-	Pages     *MarketPageFetcher
+	HTTP            *HttpClient
+	Markets         *MarketFetcher
+	Portfolio       *PortfolioFetcher
+	Pages           *MarketPageFetcher
+	ApiTokens       *ApiTokenService
+	PartnerAccounts *PartnerAccountService
+	DelegatedOrders *DelegatedOrderService
 }
 
 // NewClient constructs a root SDK client with shared domain services.
@@ -24,10 +27,13 @@ func NewClientFromHTTP(httpClient *HttpClient) *Client {
 	}
 
 	return &Client{
-		HTTP:      httpClient,
-		Markets:   NewMarketFetcher(httpClient, WithMarketLogger(logger)),
-		Portfolio: NewPortfolioFetcher(httpClient, WithPortfolioLogger(logger)),
-		Pages:     NewMarketPageFetcher(httpClient, WithMarketPageLogger(logger)),
+		HTTP:            httpClient,
+		Markets:         NewMarketFetcher(httpClient, WithMarketLogger(logger)),
+		Portfolio:       NewPortfolioFetcher(httpClient, WithPortfolioLogger(logger)),
+		Pages:           NewMarketPageFetcher(httpClient, WithMarketPageLogger(logger)),
+		ApiTokens:       NewApiTokenService(httpClient, WithApiTokenLogger(logger)),
+		PartnerAccounts: NewPartnerAccountService(httpClient, WithPartnerAccountLogger(logger)),
+		DelegatedOrders: NewDelegatedOrderService(httpClient, WithDelegatedOrderLogger(logger)),
 	}
 }
 
@@ -54,10 +60,13 @@ func (c *Client) NewOrderClient(privateKeyHex string, opts ...OrderClientOption)
 
 // NewWebSocketClient creates a WebSocket client and reuses the HTTP client's API key when present.
 func (c *Client) NewWebSocketClient(opts ...WebSocketOption) *WebSocketClient {
-	merged := make([]WebSocketOption, 0, len(opts)+2)
+	merged := make([]WebSocketOption, 0, len(opts)+3)
 	if c != nil && c.HTTP != nil {
 		if apiKey := c.HTTP.APIKey(); apiKey != "" {
 			merged = append(merged, WithWebSocketAPIKey(apiKey))
+		}
+		if hmacCreds := c.HTTP.HMACCredentials(); hmacCreds != nil {
+			merged = append(merged, WithWebSocketHMACCredentials(*hmacCreds))
 		}
 		if c.HTTP.logger != nil {
 			merged = append(merged, WithWebSocketLogger(c.HTTP.logger))

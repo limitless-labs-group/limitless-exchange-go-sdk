@@ -6,6 +6,19 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ### Added
 
+- API token and partner-account surface for the new `apiToken` feature set:
+  - `Client.ApiTokens`
+  - `Client.PartnerAccounts`
+  - `Client.DelegatedOrders`
+- New HMAC authentication support for scoped API tokens:
+  - `WithHMACCredentials(...)`
+  - request signing with `lmts-api-key`, `lmts-timestamp`, and `lmts-signature`
+  - WebSocket handshake support for HMAC-authenticated subscriptions
+- New HTTP helpers needed by the api-token flows:
+  - `Patch(...)`
+  - `PostWithHeaders(...)`
+  - `PostWithIdentity(...)`
+  - `GetWithIdentity(...)`
 - New root `Client` API that wires shared domain services:
   - `Client.Markets`
   - `Client.Portfolio`
@@ -16,6 +29,11 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
   - `SignOrderForMarket(...)`
   - `SignOrderWithConfig(...)`
 - New tests covering:
+  - HMAC signing and transport auth precedence
+  - Privy identity-header overrides
+  - api-token self-service endpoints
+  - partner account creation flows
+  - delegated order submission
   - market-page redirect/property/filter flows
   - offline signing and fallback verifying contract behavior
   - websocket reconnect and API-key rotation with preserved subscriptions
@@ -24,6 +42,9 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ### Changed
 
+- Authenticated SDK operations now accept either legacy API-key auth or new HMAC api-token auth through the shared HTTP client.
+- The public Go SDK no longer exposes `admin/*` api-token endpoints; internal admin mutation flows remain only in the integration project via bare HTTP helpers.
+- `sdkVersion` is bumped to `1.0.4` for the upcoming release build.
 - README and examples now prefer explicit configuration and the root `Client` API over the older fetcher-by-fetcher setup.
 - Authenticated SDK operations now fail locally with clear messages when no API key is configured, instead of relying on opaque server-side authentication failures.
 - Retry behavior now includes retryable transport/network failures in addition to retryable HTTP status codes.
@@ -42,6 +63,15 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
   - `SetAPIKey(...)` reconnects without dropping saved subscriptions
   - handler removal remains consistent across reconnects
 - Fixed authenticated WebSocket channel checks to cover authenticated order/fill channels in addition to positions/transactions.
+- Fixed authenticated surface mismatches for the api-token feature:
+  - Privy-only bootstrap endpoints use `identity: Bearer <token>` instead of the default client auth mode
+  - root `Client.NewWebSocketClient()` now carries HMAC credentials into the WS client
+  - delegated partner order placement is modeled as a separate `DelegatedOrderService`, avoiding hidden coupling to local private keys and `/profiles/:account`
+- Fixed HTTP error typing to expose `ConflictError` for 409 responses used by partner-account and client-order-id flows.
+- Fixed partner-account creation payload and validation:
+  - `CreatePartnerAccountInput` now sends `displayName` instead of the rejected legacy `label` field
+  - `CreateAccount(...)` now validates the backend 44-character `displayName` limit before sending the request
+  - partner-account tests now cover server-wallet mode, duplicate-address `409` conflicts, and EOA self-address rejection
 - Fixed order-validation drift:
   - FOK amount precision validation now matches builder behavior
   - GTC price tick alignment and size-step validation now match builder behavior

@@ -23,6 +23,23 @@ func TestWebSocketClient_Subscribe_AuthValidation(t *testing.T) {
 	}
 }
 
+func TestWebSocketClient_Subscribe_AuthValidation_AllowsHMAC(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient(
+		WithWebSocketHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "secret"}),
+		WithAutoReconnect(false),
+	)
+	ws.mu.Lock()
+	ws.state = StateConnected
+	ws.sio = &socketIOClient{}
+	ws.mu.Unlock()
+
+	if err := ws.Subscribe(context.Background(), ChannelSubscribePositions, SubscriptionOptions{}); err != nil {
+		t.Fatalf("expected HMAC-authenticated subscribe to succeed, got %v", err)
+	}
+}
+
 func TestWebSocketClient_OnOnceOffDispatchLocal(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +104,42 @@ func TestWebSocketClient_OnOrderbookUpdate_Parsing(t *testing.T) {
 	}
 	if len(received.Orderbook.Bids) != 1 || len(received.Orderbook.Asks) != 1 {
 		t.Fatalf("expected one bid/ask, got bids=%d asks=%d", len(received.Orderbook.Bids), len(received.Orderbook.Asks))
+	}
+}
+
+func TestWebSocketClient_OnOrderbookUpdate_ParsingStringEncodedScalars(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received OrderbookUpdate
+	called := false
+	ws.OnOrderbookUpdate(func(update OrderbookUpdate) {
+		called = true
+		received = update
+	})
+
+	ws.dispatchLocal("orderbookUpdate", json.RawMessage(`{
+		"marketSlug":"btc",
+		"orderbook":{
+			"bids":[{"price":0.51,"size":100,"side":"buy"}],
+			"asks":[{"price":0.52,"size":120,"side":"sell"}],
+			"tokenId":"123",
+			"adjustedMidpoint":0.515,
+			"maxSpread":"0.05",
+			"minSize":"100000000"
+		},
+		"timestamp":"2026-03-17T00:00:00.000Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnOrderbookUpdate handler to be called")
+	}
+	if received.Orderbook.MaxSpread.Float64() != 0.05 {
+		t.Fatalf("expected maxSpread 0.05, got %f", received.Orderbook.MaxSpread.Float64())
+	}
+	if received.Orderbook.MinSize.Float64() != 100000000 {
+		t.Fatalf("expected minSize 100000000, got %f", received.Orderbook.MinSize.Float64())
 	}
 }
 
@@ -176,9 +229,12 @@ func TestWebSocketClient_SetAPIKey_ReconnectPreservesDistinctSubscriptions(t *te
 			return nil
 		},
 	}
-	socketIOClientFactory = func(wsURL, namespace string, apiKey string, logger Logger) (*socketIOClient, error) {
+	socketIOClientFactory = func(wsURL, namespace string, apiKey string, hmacCreds *HMACCredentials, logger Logger) (*socketIOClient, error) {
 		if apiKey != "new-key" {
 			t.Fatalf("expected reconnect to use new API key, got %q", apiKey)
+		}
+		if hmacCreds != nil {
+			t.Fatalf("expected HMAC credentials to be nil for API-key reconnect, got %+v", hmacCreds)
 		}
 		return nextSIO, nil
 	}
@@ -237,4 +293,36 @@ func TestWebSocketClient_SetAPIKey_ReconnectPreservesDistinctSubscriptions(t *te
 	}
 
 	t.Fatalf("timed out waiting for reconnect and resubscribe, emits=%d state=%s", atomic.LoadInt32(&reconnectEmits), ws.State())
+}
+
+func TestWebSocketClient_Connect_PropagatesHMACCredentials(t *testing.T) {
+	oldFactory := socketIOClientFactory
+	defer func() {
+		socketIOClientFactory = oldFactory
+	}()
+
+	socketIOClientFactory = func(wsURL, namespace string, apiKey string, hmacCreds *HMACCredentials, logger Logger) (*socketIOClient, error) {
+		if apiKey != "" {
+			t.Fatalf("expected API key to be empty, got %q", apiKey)
+		}
+		if hmacCreds == nil || hmacCreds.TokenID != "token-1" {
+			t.Fatalf("expected HMAC credentials to be forwarded, got %+v", hmacCreds)
+		}
+
+		return &socketIOClient{
+			namespace: "/markets",
+			handlers:  map[string][]handlerEntry{},
+			done:      make(chan struct{}),
+			ackChans:  map[int]chan json.RawMessage{},
+			logger:    NewNoOpLogger(),
+		}, nil
+	}
+
+	ws := NewWebSocketClient(
+		WithWebSocketHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "secret"}),
+		WithAutoReconnect(false),
+	)
+	if err := ws.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect returned error: %v", err)
+	}
 }

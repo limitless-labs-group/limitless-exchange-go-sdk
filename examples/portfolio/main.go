@@ -14,13 +14,17 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("LIMITLESS_API_KEY environment variable is required")
 	}
+	profileAddress := os.Getenv("PROFILE_ADDRESS")
+	if profileAddress == "" {
+		log.Fatal("PROFILE_ADDRESS environment variable is required")
+	}
 
 	sdk := limitless.NewClient(limitless.WithAPIKey(apiKey))
 
 	ctx := context.Background()
 
 	// Fetch profile
-	profile, err := sdk.Portfolio.GetProfile(ctx, "0xYourWalletAddress")
+	profile, err := sdk.Portfolio.GetProfile(ctx, profileAddress)
 	if err != nil {
 		log.Fatalf("Failed to fetch profile: %v", err)
 	}

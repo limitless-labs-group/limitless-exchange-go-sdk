@@ -106,7 +106,7 @@ func (oc *OrderClient) ensureUserData(ctx context.Context) (*UserData, error) {
 	if oc.userData != nil {
 		return oc.userData, nil
 	}
-	if err := oc.client.requireAPIKey("order creation and profile lookup"); err != nil {
+	if err := oc.client.requireAuth("order creation and profile lookup"); err != nil {
 		return nil, err
 	}
 
@@ -142,7 +142,7 @@ func (oc *OrderClient) ensureUserData(ctx context.Context) (*UserData, error) {
 
 // CreateOrder creates, signs, and submits a new order.
 func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams) (*OrderResponse, error) {
-	if err := oc.client.requireAPIKey("CreateOrder"); err != nil {
+	if err := oc.client.requireAuth("CreateOrder"); err != nil {
 		return nil, err
 	}
 
@@ -216,7 +216,7 @@ type CancelResponse struct {
 
 // Cancel cancels an order by ID and returns the API message.
 func (oc *OrderClient) Cancel(ctx context.Context, orderID string) (string, error) {
-	if err := oc.client.requireAPIKey("Cancel"); err != nil {
+	if err := oc.client.requireAuth("Cancel"); err != nil {
 		return "", err
 	}
 
@@ -231,7 +231,7 @@ func (oc *OrderClient) Cancel(ctx context.Context, orderID string) (string, erro
 
 // CancelAll cancels all orders for a market and returns the API message.
 func (oc *OrderClient) CancelAll(ctx context.Context, marketSlug string) (string, error) {
-	if err := oc.client.requireAPIKey("CancelAll"); err != nil {
+	if err := oc.client.requireAuth("CancelAll"); err != nil {
 		return "", err
 	}
 
