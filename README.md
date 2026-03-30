@@ -114,6 +114,15 @@ sdk := limitless.NewClient(
 
 Environment auto-loading: `NewHttpClient()` and `NewWebSocketClient()` can read `LIMITLESS_API_KEY` from the environment when no explicit API key is provided. `WithAPIKey(...)` remains fully supported and is the clearest way to configure API-key auth in application code.
 
+Use partner HMAC credentials only in a backend or BFF service. Do not expose `LIMITLESS_API_TOKEN_ID` / `LIMITLESS_API_TOKEN_SECRET` in browser code or client-side storage.
+
+Recommended setup:
+
+- Keep public market and market-page reads in the browser.
+- Store the real HMAC credentials on your backend.
+- Use this SDK server-side to sign partner-authenticated requests.
+- Expose only your own app-specific endpoints to the frontend.
+
 **Environment Variables:**
 
 Create a `.env` file:

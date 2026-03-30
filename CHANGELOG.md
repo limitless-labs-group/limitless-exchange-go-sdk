@@ -50,6 +50,7 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 - Retry behavior now includes retryable transport/network failures in addition to retryable HTTP status codes.
 - URL construction now consistently uses escaped path segments and structured query encoding.
 - Validation behavior is aligned with order-building behavior so exported validators and builder logic accept/reject the same payloads.
+- README now clarifies that partner HMAC credentials are intended for backend/BFF usage; browser apps should keep public reads in the frontend and route partner-authenticated actions through their own backend.
 
 ### Fixed
 
