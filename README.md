@@ -430,19 +430,20 @@ type Logger interface {
 
 ## Examples
 
-Runnable examples are available in the [`examples/`](./examples) directory:
+Runnable examples are available in the [`examples/`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples) directory:
 
 | Example | Description | Auth Required |
 |---------|-------------|:---:|
-| [`active_markets`](./examples/active_markets) | Fetch active markets with pagination and sorting | No |
-| [`clob_gtc_order`](./examples/clob_gtc_order) | Place a GTC (limit) order | Yes |
-| [`clob_fok_order`](./examples/clob_fok_order) | Place a FOK (market) order | Yes |
-| [`negrisk_order`](./examples/negrisk_order) | Trade on NegRisk group markets | Yes |
-| [`portfolio`](./examples/portfolio) | Fetch profile, positions, and history | Yes |
-| [`api_tokens`](./examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
-| [`delegated_order`](./examples/delegated_order) | Place a delegated partner order | Scoped API key |
-| [`websocket_orderbook`](./examples/websocket_orderbook) | Stream live orderbook updates | No |
-| [`websocket_positions`](./examples/websocket_positions) | Stream position and transaction updates | Yes |
+| [`active_markets`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/active_markets) | Fetch active markets with pagination and sorting | No |
+| [`clob_gtc_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_gtc_order) | Place a GTC (limit) order | Yes |
+| [`clob_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_fok_order) | Place a FOK (market) order | Yes |
+| [`negrisk_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/negrisk_order) | Trade on NegRisk group markets | Yes |
+| [`portfolio`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/portfolio) | Fetch profile, positions, and history | Yes |
+| [`api_tokens`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
+| [`delegated_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_order) | Place a delegated partner order | Scoped API key |
+| [`delegated_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_fok_order) | Place a delegated FOK partner order | Scoped API key |
+| [`websocket_orderbook`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_orderbook) | Stream live orderbook updates | No |
+| [`websocket_positions`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_positions) | Stream position and transaction updates | Yes |
 
 Run any example:
 
@@ -491,6 +492,7 @@ examples/
 ├── portfolio/             # Profile and position fetching
 ├── api_tokens/            # Scoped API-key listing and capability lookup
 ├── delegated_order/       # Delegated partner order placement
+├── delegated_fok_order/   # Delegated FOK partner order placement
 ├── websocket_orderbook/   # Live orderbook streaming
 └── websocket_positions/   # Position and transaction streaming
 
@@ -507,7 +509,7 @@ The SDK has minimal external dependencies:
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## License
 
