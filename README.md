@@ -442,6 +442,7 @@ Runnable examples are available in the [`examples/`](https://github.com/limitles
 | [`api_tokens`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
 | [`delegated_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_order) | Place a delegated partner order | Scoped API key |
 | [`delegated_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_fok_order) | Place a delegated FOK partner order | Scoped API key |
+| [`e2e_fok_flow`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/e2e_fok_flow) | End-to-end partner delegated FOK flow without cleanup | Scoped API key / Privy |
 | [`websocket_orderbook`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_orderbook) | Stream live orderbook updates | No |
 | [`websocket_positions`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_positions) | Stream position and transaction updates | Yes |
 
@@ -493,6 +494,7 @@ examples/
 ├── api_tokens/            # Scoped API-key listing and capability lookup
 ├── delegated_order/       # Delegated partner order placement
 ├── delegated_fok_order/   # Delegated FOK partner order placement
+├── e2e_fok_flow/          # End-to-end partner delegated FOK flow
 ├── websocket_orderbook/   # Live orderbook streaming
 └── websocket_positions/   # Position and transaction streaming
 
