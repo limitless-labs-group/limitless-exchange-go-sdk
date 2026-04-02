@@ -4,6 +4,8 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-04-02
+
 ### Added
 
 - API token and partner-account surface for the new `apiToken` feature set:
@@ -44,7 +46,6 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 - Authenticated SDK operations now accept either legacy API-key auth or new HMAC api-token auth through the shared HTTP client.
 - The public Go SDK no longer exposes `admin/*` api-token endpoints; internal admin mutation flows remain only in the integration project via bare HTTP helpers.
-- `sdkVersion` is bumped to `1.0.4` for the upcoming release build.
 - README and examples now prefer explicit configuration and the root `Client` API over the older fetcher-by-fetcher setup.
 - Authenticated SDK operations now fail locally with clear messages when no API key is configured, instead of relying on opaque server-side authentication failures.
 - Retry behavior now includes retryable transport/network failures in addition to retryable HTTP status codes.
