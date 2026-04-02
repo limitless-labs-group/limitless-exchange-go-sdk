@@ -513,6 +513,30 @@ func (ws *WebSocketClient) OnMarket(handler func(MarketUpdateEvent)) {
 	})
 }
 
+// OnMarketCreated registers a handler for market-created lifecycle events.
+func (ws *WebSocketClient) OnMarketCreated(handler func(MarketCreatedEvent)) {
+	ws.On("marketCreated", func(data json.RawMessage) {
+		var event MarketCreatedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			ws.logger.Error("Failed to parse marketCreated event", err)
+			return
+		}
+		handler(event)
+	})
+}
+
+// OnMarketResolved registers a handler for market-resolved lifecycle events.
+func (ws *WebSocketClient) OnMarketResolved(handler func(MarketResolvedEvent)) {
+	ws.On("marketResolved", func(data json.RawMessage) {
+		var event MarketResolvedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			ws.logger.Error("Failed to parse marketResolved event", err)
+			return
+		}
+		handler(event)
+	})
+}
+
 func (ws *WebSocketClient) setupInternalHandlers() {
 	ws.sio.On("disconnect", func(data json.RawMessage) {
 		ws.mu.Lock()

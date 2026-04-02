@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 // WebSocketState represents the WebSocket connection state.
@@ -156,6 +157,25 @@ type TransactionEvent struct {
 	AmountCollateral *string `json:"amountCollateral,omitempty"`
 	Price            *string `json:"price,omitempty"`
 	Side             *string `json:"side,omitempty"` // "BUY" or "SELL"
+}
+
+// MarketCreatedEvent is emitted when a market becomes visible to websocket lifecycle subscribers.
+type MarketCreatedEvent struct {
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Type        string    `json:"type"` // "AMM" or "CLOB"
+	GroupSlug   *string   `json:"groupSlug,omitempty"`
+	CategoryIDs []int     `json:"categoryIds,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// MarketResolvedEvent is emitted when a market resolves.
+type MarketResolvedEvent struct {
+	Slug           string    `json:"slug"`
+	Type           string    `json:"type"`           // "AMM" or "CLOB"
+	WinningOutcome string    `json:"winningOutcome"` // "YES" or "NO"
+	WinningIndex   int       `json:"winningIndex"`   // 0 or 1
+	ResolutionDate time.Time `json:"resolutionDate"`
 }
 
 // WebSocketConfig contains WebSocket connection configuration.

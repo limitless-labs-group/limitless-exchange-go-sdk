@@ -143,6 +143,81 @@ func TestWebSocketClient_OnOrderbookUpdate_ParsingStringEncodedScalars(t *testin
 	}
 }
 
+func TestWebSocketClient_OnMarketCreated_Parsing(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received MarketCreatedEvent
+	called := false
+	ws.OnMarketCreated(func(event MarketCreatedEvent) {
+		called = true
+		received = event
+	})
+
+	ws.dispatchLocal("marketCreated", json.RawMessage(`{
+		"slug":"market-123",
+		"title":"BTC above 120k?",
+		"type":"CLOB",
+		"groupSlug":"crypto-btc-apr",
+		"categoryIds":[1,2],
+		"createdAt":"2026-04-02T08:00:00.000Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnMarketCreated handler to be called")
+	}
+	if received.Slug != "market-123" {
+		t.Fatalf("expected slug market-123, got %s", received.Slug)
+	}
+	if received.Title != "BTC above 120k?" {
+		t.Fatalf("expected title to round-trip, got %q", received.Title)
+	}
+	if received.Type != "CLOB" {
+		t.Fatalf("expected type CLOB, got %s", received.Type)
+	}
+	if received.GroupSlug == nil || *received.GroupSlug != "crypto-btc-apr" {
+		t.Fatalf("expected groupSlug crypto-btc-apr, got %+v", received.GroupSlug)
+	}
+	if len(received.CategoryIDs) != 2 {
+		t.Fatalf("expected 2 category ids, got %d", len(received.CategoryIDs))
+	}
+}
+
+func TestWebSocketClient_OnMarketResolved_Parsing(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received MarketResolvedEvent
+	called := false
+	ws.OnMarketResolved(func(event MarketResolvedEvent) {
+		called = true
+		received = event
+	})
+
+	ws.dispatchLocal("marketResolved", json.RawMessage(`{
+		"slug":"market-123",
+		"type":"CLOB",
+		"winningOutcome":"YES",
+		"winningIndex":0,
+		"resolutionDate":"2026-04-02T09:00:00.000Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnMarketResolved handler to be called")
+	}
+	if received.Slug != "market-123" {
+		t.Fatalf("expected slug market-123, got %s", received.Slug)
+	}
+	if received.WinningOutcome != "YES" {
+		t.Fatalf("expected winningOutcome YES, got %s", received.WinningOutcome)
+	}
+	if received.WinningIndex != 0 {
+		t.Fatalf("expected winningIndex 0, got %d", received.WinningIndex)
+	}
+}
+
 func TestSocketIOClient_HandleSocketIOPacket_EventDispatch(t *testing.T) {
 	t.Parallel()
 
