@@ -70,10 +70,14 @@ func DivCeil(a, b *big.Int) (*big.Int, error) {
 }
 
 // ScaleTo6Decimals converts a float64 amount to an int64 scaled to 6 decimal places.
-func ScaleTo6Decimals(amount float64) int64 {
+// Returns an error if the scaled value overflows int64.
+func ScaleTo6Decimals(amount float64) (int64, error) {
 	s := fmt.Sprintf("%.6f", amount)
 	result := ParseDecToInt(s, Scale6)
-	return result.Int64()
+	if !result.IsInt64() {
+		return 0, fmt.Errorf("overflow: scaled value %s exceeds int64 range", result.String())
+	}
+	return result.Int64(), nil
 }
 
 // IsTickAligned checks if a value is a multiple of the given tick size.

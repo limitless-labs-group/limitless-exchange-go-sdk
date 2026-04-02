@@ -3,6 +3,7 @@ package limitless
 import (
 	"context"
 	"fmt"
+	"net/url"
 )
 
 // PortfolioFetcher retrieves user positions and portfolio information.
@@ -36,9 +37,13 @@ func NewPortfolioFetcher(client *HttpClient, opts ...PortfolioOption) *Portfolio
 // getProfile fetches a user profile by wallet address and decodes into result.
 // This is unexported because it's used internally by OrderClient.
 func (pf *PortfolioFetcher) getProfile(ctx context.Context, address string, result any) error {
+	if err := pf.client.requireAuth("GetProfile"); err != nil {
+		return err
+	}
+
 	pf.logger.Debug("Fetching user profile", map[string]any{"address": address})
 
-	if err := pf.client.Get(ctx, "/profiles/"+address, result); err != nil {
+	if err := pf.client.Get(ctx, "/profiles/"+url.PathEscape(address), result); err != nil {
 		pf.logger.Error("Failed to fetch user profile", fmt.Errorf("address: %s: %w", address, err))
 		return err
 	}
@@ -58,6 +63,10 @@ func (pf *PortfolioFetcher) GetProfile(ctx context.Context, address string) (*Us
 
 // GetPositions fetches the raw portfolio positions response.
 func (pf *PortfolioFetcher) GetPositions(ctx context.Context) (*PortfolioPositionsResponse, error) {
+	if err := pf.client.requireAuth("GetPositions"); err != nil {
+		return nil, err
+	}
+
 	pf.logger.Debug("Fetching user positions")
 
 	var resp PortfolioPositionsResponse
@@ -101,6 +110,10 @@ func (pf *PortfolioFetcher) GetAMMPositions(ctx context.Context) ([]AMMPosition,
 // GetUserHistory fetches paginated user history.
 // Defaults to page=1, limit=10 when zero values are passed.
 func (pf *PortfolioFetcher) GetUserHistory(ctx context.Context, page, limit int) (*HistoryResponse, error) {
+	if err := pf.client.requireAuth("GetUserHistory"); err != nil {
+		return nil, err
+	}
+
 	if page <= 0 {
 		page = 1
 	}
@@ -110,7 +123,10 @@ func (pf *PortfolioFetcher) GetUserHistory(ctx context.Context, page, limit int)
 
 	pf.logger.Debug("Fetching user history", map[string]any{"page": page, "limit": limit})
 
-	path := fmt.Sprintf("/portfolio/history?page=%d&limit=%d", page, limit)
+	query := url.Values{}
+	query.Set("page", fmt.Sprintf("%d", page))
+	query.Set("limit", fmt.Sprintf("%d", limit))
+	path := "/portfolio/history?" + query.Encode()
 
 	var resp HistoryResponse
 	if err := pf.client.Get(ctx, path, &resp); err != nil {

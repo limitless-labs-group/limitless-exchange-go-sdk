@@ -10,19 +10,23 @@ import (
 )
 
 func main() {
+	apiKey := os.Getenv("LIMITLESS_API_KEY")
+	if apiKey == "" {
+		log.Fatal("LIMITLESS_API_KEY environment variable is required")
+	}
+
 	privateKey := os.Getenv("PRIVATE_KEY")
 	if privateKey == "" {
 		log.Fatal("PRIVATE_KEY environment variable is required")
 	}
 
-	client := limitless.NewHttpClient()
-	fetcher := limitless.NewMarketFetcher(client)
+	sdk := limitless.NewClient(limitless.WithAPIKey(apiKey))
 
 	ctx := context.Background()
 
 	// Fetch a market to get venue info (caches for order creation)
 	marketSlug := "will-btc-hit-100k"
-	market, err := fetcher.GetMarket(ctx, marketSlug)
+	market, err := sdk.Markets.GetMarket(ctx, marketSlug)
 	if err != nil {
 		log.Fatalf("Failed to fetch market: %v", err)
 	}
@@ -34,11 +38,7 @@ func main() {
 	}
 
 	// Create order client
-	orderClient, err := limitless.NewOrderClient(
-		client,
-		privateKey,
-		limitless.WithOrderMarketFetcher(fetcher),
-	)
+	orderClient, err := sdk.NewOrderClient(privateKey)
 	if err != nil {
 		log.Fatalf("Failed to create order client: %v", err)
 	}

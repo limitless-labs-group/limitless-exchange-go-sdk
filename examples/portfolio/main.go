@@ -4,19 +4,27 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/limitless-labs-group/limitless-exchange-go-sdk/limitless"
 )
 
 func main() {
-	// Requires LIMITLESS_API_KEY environment variable
-	client := limitless.NewHttpClient()
-	pf := limitless.NewPortfolioFetcher(client)
+	apiKey := os.Getenv("LIMITLESS_API_KEY")
+	if apiKey == "" {
+		log.Fatal("LIMITLESS_API_KEY environment variable is required")
+	}
+	profileAddress := os.Getenv("PROFILE_ADDRESS")
+	if profileAddress == "" {
+		log.Fatal("PROFILE_ADDRESS environment variable is required")
+	}
+
+	sdk := limitless.NewClient(limitless.WithAPIKey(apiKey))
 
 	ctx := context.Background()
 
 	// Fetch profile
-	profile, err := pf.GetProfile(ctx, "0xYourWalletAddress")
+	profile, err := sdk.Portfolio.GetProfile(ctx, profileAddress)
 	if err != nil {
 		log.Fatalf("Failed to fetch profile: %v", err)
 	}
@@ -28,7 +36,7 @@ func main() {
 	}
 
 	// Fetch CLOB positions
-	clobPositions, err := pf.GetCLOBPositions(ctx)
+	clobPositions, err := sdk.Portfolio.GetCLOBPositions(ctx)
 	if err != nil {
 		log.Fatalf("Failed to fetch CLOB positions: %v", err)
 	}
@@ -41,7 +49,7 @@ func main() {
 	}
 
 	// Fetch AMM positions
-	ammPositions, err := pf.GetAMMPositions(ctx)
+	ammPositions, err := sdk.Portfolio.GetAMMPositions(ctx)
 	if err != nil {
 		log.Fatalf("Failed to fetch AMM positions: %v", err)
 	}
@@ -54,7 +62,7 @@ func main() {
 	}
 
 	// Fetch user history
-	history, err := pf.GetUserHistory(ctx, 1, 10)
+	history, err := sdk.Portfolio.GetUserHistory(ctx, 1, 10)
 	if err != nil {
 		log.Fatalf("Failed to fetch history: %v", err)
 	}

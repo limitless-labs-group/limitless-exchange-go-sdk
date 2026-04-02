@@ -3,7 +3,6 @@ package limitless
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -60,16 +59,19 @@ type socketIOClient struct {
 	ackChans     map[int]chan json.RawMessage
 	ackMu        sync.Mutex
 	logger       Logger
+	emitHook     func(event string, data interface{}) error
+	emitAckHook  func(event string, data interface{}, timeout time.Duration) (json.RawMessage, error)
+	closeHook    func() error
 }
 
-func newSocketIOClient(wsURL, namespace string, apiKey string, logger Logger) (*socketIOClient, error) {
+func newSocketIOClient(wsURL, namespace string, apiKey string, hmacCreds *HMACCredentials, logger Logger) (*socketIOClient, error) {
 	// Build WebSocket URL with Engine.IO query params
 	// Socket.IO uses /socket.io/ path with EIO=4 and transport=websocket
 	u := wsURL + "/socket.io/?EIO=4&transport=websocket"
 
-	header := http.Header{}
-	if apiKey != "" {
-		header.Set("X-API-Key", apiKey)
+	header, err := buildWebSocketHeaders(apiKey, hmacCreds)
+	if err != nil {
+		return nil, err
 	}
 
 	logger.Debug("Connecting WebSocket", map[string]any{"url": u})
@@ -158,6 +160,9 @@ func newSocketIOClient(wsURL, namespace string, apiKey string, logger Logger) (*
 }
 
 func (s *socketIOClient) writeMessage(msg string) error {
+	if s.conn == nil {
+		return nil
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.conn.WriteMessage(websocket.TextMessage, []byte(msg))
@@ -340,6 +345,10 @@ func (s *socketIOClient) Off(event string, handlerIDs ...int64) {
 
 // Emit sends an event to the server.
 func (s *socketIOClient) Emit(event string, data interface{}) error {
+	if s.emitHook != nil {
+		return s.emitHook(event, data)
+	}
+
 	var payload []interface{}
 	payload = append(payload, event)
 	if data != nil {
@@ -357,6 +366,10 @@ func (s *socketIOClient) Emit(event string, data interface{}) error {
 
 // EmitWithAck sends an event and waits for an acknowledgment response.
 func (s *socketIOClient) EmitWithAck(event string, data interface{}, timeout time.Duration) (json.RawMessage, error) {
+	if s.emitAckHook != nil {
+		return s.emitAckHook(event, data, timeout)
+	}
+
 	s.ackMu.Lock()
 	s.ackID++
 	ackID := s.ackID
@@ -447,7 +460,17 @@ func (s *socketIOClient) Close() error {
 	s.closed = true
 	s.closeMu.Unlock()
 
-	close(s.done)
+	if s.done != nil {
+		close(s.done)
+	}
+
+	if s.closeHook != nil {
+		return s.closeHook()
+	}
+
+	if s.conn == nil {
+		return nil
+	}
 
 	// Send Socket.IO disconnect
 	_ = s.writeMessage(eioMessage + sioDisconnect + s.namespace + ",")

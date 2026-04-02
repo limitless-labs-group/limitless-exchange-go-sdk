@@ -44,6 +44,11 @@ type ValidationError struct {
 	APIError
 }
 
+// ConflictError represents an HTTP 409 conflict error.
+type ConflictError struct {
+	APIError
+}
+
 // parseAPIError creates the appropriate typed error from an HTTP response.
 func parseAPIError(status int, body []byte, url, method string) error {
 	msg := extractErrorMessage(body, fmt.Sprintf("Request failed with status %d", status))
@@ -63,6 +68,8 @@ func parseAPIError(status int, body []byte, url, method string) error {
 		return &AuthenticationError{APIError: base}
 	case status == 400:
 		return &ValidationError{APIError: base}
+	case status == 409:
+		return &ConflictError{APIError: base}
 	default:
 		return &base
 	}

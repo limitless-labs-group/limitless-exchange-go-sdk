@@ -3,7 +3,10 @@ package limitless
 import (
 	"context"
 	"errors"
+	"io"
 	"math"
+	"net"
+	neturl "net/url"
 	"time"
 )
 
@@ -66,6 +69,16 @@ func (rc *RetryConfig) delay(attempt int) time.Duration {
 }
 
 func (rc *RetryConfig) shouldRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if isRetryableTransportError(err) {
+		return true
+	}
+
 	codes := rc.StatusCodes
 	if len(codes) == 0 {
 		codes = []int{429, 500, 502, 503, 504}
@@ -105,7 +118,53 @@ func retryStatusCodeFromError(err error) (int, bool) {
 		return validationErr.Status, true
 	}
 
+	var conflictErr *ConflictError
+	if errors.As(err, &conflictErr) {
+		return conflictErr.Status, true
+	}
+
 	return 0, false
+}
+
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var urlErr *neturl.Error
+	if errors.As(err, &urlErr) {
+		if urlErr.Err == nil {
+			return true
+		}
+		return isRetryableTransportError(urlErr.Err)
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return true
+		}
+		type temporary interface {
+			Temporary() bool
+		}
+		var tempErr temporary
+		if errors.As(err, &tempErr) && tempErr.Temporary() {
+			return true
+		}
+	}
+
+	return false
 }
 
 // WithRetry executes fn with retry logic based on the given config.
@@ -210,6 +269,15 @@ func (rc *RetryableClient) Post(ctx context.Context, path string, body, result a
 	return err
 }
 
+// Patch performs a PATCH request with retry logic.
+func (rc *RetryableClient) Patch(ctx context.Context, path string, body, result any) error {
+	_, err := WithRetry(ctx, func() (struct{}, error) {
+		err := rc.client.Patch(ctx, path, body, result)
+		return struct{}{}, err
+	}, rc.config, rc.logger)
+	return err
+}
+
 // Delete performs a DELETE request with retry logic.
 func (rc *RetryableClient) Delete(ctx context.Context, path string, result any) error {
 	_, err := WithRetry(ctx, func() (struct{}, error) {
@@ -227,4 +295,46 @@ func (rc *RetryableClient) SetAPIKey(key string) {
 // ClearAPIKey removes the API key from the underlying HTTP client.
 func (rc *RetryableClient) ClearAPIKey() {
 	rc.client.ClearAPIKey()
+}
+
+// SetHMACCredentials sets HMAC credentials on the underlying HTTP client.
+func (rc *RetryableClient) SetHMACCredentials(creds HMACCredentials) {
+	rc.client.SetHMACCredentials(creds)
+}
+
+// ClearHMACCredentials removes HMAC credentials from the underlying HTTP client.
+func (rc *RetryableClient) ClearHMACCredentials() {
+	rc.client.ClearHMACCredentials()
+}
+
+// HMACCredentials returns the current HMAC credentials from the underlying HTTP client.
+func (rc *RetryableClient) HMACCredentials() *HMACCredentials {
+	return rc.client.HMACCredentials()
+}
+
+// PostWithHeaders performs a POST request with retry logic and extra headers.
+func (rc *RetryableClient) PostWithHeaders(ctx context.Context, path string, body any, extraHeaders map[string]string, result any) error {
+	_, err := WithRetry(ctx, func() (struct{}, error) {
+		err := rc.client.PostWithHeaders(ctx, path, body, extraHeaders, result)
+		return struct{}{}, err
+	}, rc.config, rc.logger)
+	return err
+}
+
+// PostWithIdentity performs a POST request with retry logic using a Privy identity token.
+func (rc *RetryableClient) PostWithIdentity(ctx context.Context, path string, identityToken string, body, result any) error {
+	_, err := WithRetry(ctx, func() (struct{}, error) {
+		err := rc.client.PostWithIdentity(ctx, path, identityToken, body, result)
+		return struct{}{}, err
+	}, rc.config, rc.logger)
+	return err
+}
+
+// GetWithIdentity performs a GET request with retry logic using a Privy identity token.
+func (rc *RetryableClient) GetWithIdentity(ctx context.Context, path string, identityToken string, result any) error {
+	_, err := WithRetry(ctx, func() (struct{}, error) {
+		err := rc.client.GetWithIdentity(ctx, path, identityToken, result)
+		return struct{}{}, err
+	}, rc.config, rc.logger)
+	return err
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"strings"
 	"testing"
 )
@@ -117,6 +118,10 @@ func TestHttpClient_TypedErrorParsing(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"message":"invalid payload"}`))
 	})
+	mux.HandleFunc("/conflict", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"duplicate request"}`))
+	})
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -140,6 +145,12 @@ func TestHttpClient_TypedErrorParsing(t *testing.T) {
 	var validationErr *ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected ValidationError, got %T (%v)", err, err)
+	}
+
+	err = client.Get(context.Background(), "/conflict", &out)
+	var conflictErr *ConflictError
+	if !errors.As(err, &conflictErr) {
+		t.Fatalf("expected ConflictError, got %T (%v)", err, err)
 	}
 }
 
@@ -183,5 +194,104 @@ func TestHttpClient_GetRaw_StatusHandling(t *testing.T) {
 	}
 	if apiErr.Status != http.StatusNotFound {
 		t.Fatalf("expected 404 status, got %d", apiErr.Status)
+	}
+}
+
+func TestHttpClient_HMACPatchAndIdentityOverride(t *testing.T) {
+	t.Parallel()
+
+	secret := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/patch", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Fatalf("expected PATCH method, got %s", r.Method)
+		}
+		if got := r.Header.Get("X-API-Key"); got != "" {
+			t.Fatalf("expected X-API-Key to be suppressed when HMAC is configured, got %q", got)
+		}
+		if got := r.Header.Get("lmts-api-key"); got != "token-1" {
+			t.Fatalf("expected lmts-api-key token-1, got %q", got)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read patch body: %v", err)
+		}
+
+		expectedSig, err := computeHMACSignature(secret, r.Header.Get("lmts-timestamp"), http.MethodPatch, r.URL.RequestURI(), string(body))
+		if err != nil {
+			t.Fatalf("failed to compute expected signature: %v", err)
+		}
+		if got := r.Header.Get("lmts-signature"); got != expectedSig {
+			t.Fatalf("expected lmts-signature %q, got %q", expectedSig, got)
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]bool{"patched": true})
+	})
+	mux.HandleFunc("/identity", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("identity"); got != "Bearer privy-token" {
+			dump, _ := httputil.DumpRequest(r, false)
+			t.Fatalf("expected identity header, got request:\n%s", string(dump))
+		}
+		if got := r.Header.Get("X-API-Key"); got != "" {
+			t.Fatalf("expected X-API-Key to be suppressed, got %q", got)
+		}
+		if got := r.Header.Get("lmts-api-key"); got != "" {
+			t.Fatalf("expected lmts-api-key to be suppressed, got %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("/partner", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("x-account"); got != "0xabc" {
+			t.Fatalf("expected x-account header, got %q", got)
+		}
+		if got := r.Header.Get("x-signing-message"); got != "0x1234" {
+			t.Fatalf("expected x-signing-message header, got %q", got)
+		}
+		if got := r.Header.Get("x-signature"); got != "0xbeef" {
+			t.Fatalf("expected x-signature header, got %q", got)
+		}
+		if got := r.Header.Get("lmts-api-key"); got != "token-1" {
+			t.Fatalf("expected lmts-api-key token-1, got %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client := NewHttpClient(
+		WithBaseURL(srv.URL),
+		WithAPIKey("api-key-value"),
+		WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: secret}),
+	)
+
+	var patchResp struct {
+		Patched bool `json:"patched"`
+	}
+	if err := client.Patch(context.Background(), "/patch", map[string]string{"value": "patched"}, &patchResp); err != nil {
+		t.Fatalf("Patch returned error: %v", err)
+	}
+	if !patchResp.Patched {
+		t.Fatal("expected patched=true")
+	}
+
+	var identityResp struct {
+		Status string `json:"status"`
+	}
+	if err := client.GetWithIdentity(context.Background(), "/identity", "privy-token", &identityResp); err != nil {
+		t.Fatalf("GetWithIdentity returned error: %v", err)
+	}
+	if identityResp.Status != "ok" {
+		t.Fatalf("expected status ok, got %q", identityResp.Status)
+	}
+
+	if err := client.PostWithHeaders(context.Background(), "/partner", map[string]string{"mode": "eoa"}, map[string]string{
+		"x-account":         "0xabc",
+		"x-signing-message": "0x1234",
+		"x-signature":       "0xbeef",
+	}, &identityResp); err != nil {
+		t.Fatalf("PostWithHeaders returned error: %v", err)
 	}
 }

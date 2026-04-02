@@ -265,7 +265,7 @@ type OrderResponse struct {
 // OrderSigningConfig contains EIP-712 signing configuration.
 type OrderSigningConfig struct {
 	ChainID         int
-	ContractAddress string
+	ContractAddress string // Fallback verifyingContract. Prefer market.venue.exchange when available.
 }
 
 // CreateOrderParams contains parameters for creating an order.

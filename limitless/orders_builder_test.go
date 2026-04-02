@@ -154,3 +154,40 @@ func TestOrderBuilder_BuildOrder_GTC_RejectsInvalidSizeStep(t *testing.T) {
 		t.Fatalf("expected invalid size error, got: %v", err)
 	}
 }
+
+func TestOrderBuilder_BuildOrder_GTC_RejectsOverflowShares(t *testing.T) {
+	t.Parallel()
+
+	builder := NewOrderBuilder("0xa00BCB04073B243E8A55f3B5899AefF596bF17C6", 300)
+	// Size of 1e13 at price 1.0 → shares = 1e13 * 1e6 = 1e19, exceeds int64 max (9.22e18)
+	_, err := builder.BuildOrder(GTCOrderArgs{
+		TokenID: "12345",
+		Side:    SideBuy,
+		Price:   1.0,
+		Size:    10000000000000,
+	})
+	if err == nil {
+		t.Fatal("expected overflow error for extremely large size, got nil")
+	}
+	if !strings.Contains(err.Error(), "overflow") {
+		t.Fatalf("expected overflow error, got: %v", err)
+	}
+}
+
+func TestOrderBuilder_BuildOrder_FOK_RejectsOverflowMakerAmount(t *testing.T) {
+	t.Parallel()
+
+	builder := NewOrderBuilder("0xa00BCB04073B243E8A55f3B5899AefF596bF17C6", 300)
+	// 1e13 * 1e6 = 1e19, exceeds int64 max
+	_, err := builder.BuildOrder(FOKOrderArgs{
+		TokenID:     "12345",
+		Side:        SideBuy,
+		MakerAmount: 10000000000000,
+	})
+	if err == nil {
+		t.Fatal("expected overflow error for extremely large FOK makerAmount, got nil")
+	}
+	if !strings.Contains(err.Error(), "overflow") {
+		t.Fatalf("expected overflow error, got: %v", err)
+	}
+}

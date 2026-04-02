@@ -142,3 +142,155 @@ func TestCreatedOrder_UnmarshalJSON_InvalidSaltFails(t *testing.T) {
 		t.Fatalf("expected unmarshal to fail for invalid salt")
 	}
 }
+
+func TestCreatedOrder_UnmarshalJSON_OverflowMakerAmountStringFails(t *testing.T) {
+	// MaxInt64 + 1 as string
+	payload := []byte(`{
+		"id":"order-1",
+		"createdAt":"2026-03-16T00:00:00Z",
+		"makerAmount":"9223372036854775808",
+		"takerAmount":"100000000",
+		"expiration":"0",
+		"signatureType":0,
+		"salt":"1742000000000000",
+		"maker":"0xmaker",
+		"signer":"0xsigner",
+		"taker":"0xtaker",
+		"tokenId":"123",
+		"side":0,
+		"feeRateBps":300,
+		"nonce":1,
+		"signature":"0xsig",
+		"orderType":"GTC",
+		"price":"0.52",
+		"marketId":42
+	}`)
+
+	var order CreatedOrder
+	if err := json.Unmarshal(payload, &order); err == nil {
+		t.Fatalf("expected unmarshal to fail for makerAmount exceeding int64 range")
+	}
+}
+
+func TestCreatedOrder_UnmarshalJSON_OverflowSaltStringFails(t *testing.T) {
+	// Very large salt as string
+	payload := []byte(`{
+		"id":"order-1",
+		"createdAt":"2026-03-16T00:00:00Z",
+		"makerAmount":"50000000",
+		"takerAmount":"100000000",
+		"expiration":"0",
+		"signatureType":0,
+		"salt":"99999999999999999999",
+		"maker":"0xmaker",
+		"signer":"0xsigner",
+		"taker":"0xtaker",
+		"tokenId":"123",
+		"side":0,
+		"feeRateBps":300,
+		"nonce":1,
+		"signature":"0xsig",
+		"orderType":"GTC",
+		"price":"0.52",
+		"marketId":42
+	}`)
+
+	var order CreatedOrder
+	if err := json.Unmarshal(payload, &order); err == nil {
+		t.Fatalf("expected unmarshal to fail for salt exceeding int64 range")
+	}
+}
+
+func TestCreatedOrder_UnmarshalJSON_OverflowTakerAmountStringFails(t *testing.T) {
+	payload := []byte(`{
+		"id":"order-1",
+		"createdAt":"2026-03-16T00:00:00Z",
+		"makerAmount":"50000000",
+		"takerAmount":"9223372036854775808",
+		"expiration":"0",
+		"signatureType":0,
+		"salt":"1742000000000000",
+		"maker":"0xmaker",
+		"signer":"0xsigner",
+		"taker":"0xtaker",
+		"tokenId":"123",
+		"side":0,
+		"feeRateBps":300,
+		"nonce":1,
+		"signature":"0xsig",
+		"orderType":"GTC",
+		"price":"0.52",
+		"marketId":42
+	}`)
+
+	var order CreatedOrder
+	if err := json.Unmarshal(payload, &order); err == nil {
+		t.Fatalf("expected unmarshal to fail for takerAmount exceeding int64 range")
+	}
+}
+
+func TestCreatedOrder_UnmarshalJSON_MaxInt64ValuesSucceed(t *testing.T) {
+	// MaxInt64 = 9223372036854775807 — should succeed
+	payload := []byte(`{
+		"id":"order-1",
+		"createdAt":"2026-03-16T00:00:00Z",
+		"makerAmount":"9223372036854775807",
+		"takerAmount":"9223372036854775807",
+		"expiration":"0",
+		"signatureType":0,
+		"salt":"9223372036854775807",
+		"maker":"0xmaker",
+		"signer":"0xsigner",
+		"taker":"0xtaker",
+		"tokenId":"123",
+		"side":0,
+		"feeRateBps":300,
+		"nonce":1,
+		"signature":"0xsig",
+		"orderType":"GTC",
+		"price":"0.52",
+		"marketId":42
+	}`)
+
+	var order CreatedOrder
+	if err := json.Unmarshal(payload, &order); err != nil {
+		t.Fatalf("expected unmarshal to succeed for MaxInt64 values, got error: %v", err)
+	}
+	if order.MakerAmount != 9223372036854775807 {
+		t.Fatalf("unexpected makerAmount: got %d", order.MakerAmount)
+	}
+	if order.Salt != 9223372036854775807 {
+		t.Fatalf("unexpected salt: got %d", order.Salt)
+	}
+}
+
+func TestCreatedOrder_UnmarshalJSON_NullPriceSucceeds(t *testing.T) {
+	payload := []byte(`{
+		"id":"order-1",
+		"createdAt":"2026-03-16T00:00:00Z",
+		"makerAmount":"50000000",
+		"takerAmount":"100000000",
+		"expiration":"0",
+		"signatureType":0,
+		"salt":"1742000000000000",
+		"maker":"0xmaker",
+		"signer":"0xsigner",
+		"taker":"0xtaker",
+		"tokenId":"123",
+		"side":0,
+		"feeRateBps":300,
+		"nonce":1,
+		"signature":"0xsig",
+		"orderType":"FOK",
+		"price":null,
+		"marketId":42
+	}`)
+
+	var order CreatedOrder
+	if err := json.Unmarshal(payload, &order); err != nil {
+		t.Fatalf("expected unmarshal to succeed with null price, got error: %v", err)
+	}
+	if order.Price != nil {
+		t.Fatalf("expected nil price, got %v", *order.Price)
+	}
+}

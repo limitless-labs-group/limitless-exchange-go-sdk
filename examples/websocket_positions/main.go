@@ -13,16 +13,30 @@ import (
 )
 
 func main() {
-	// API key required for authenticated subscriptions
 	apiKey := os.Getenv("LIMITLESS_API_KEY")
-	if apiKey == "" {
-		log.Fatal("LIMITLESS_API_KEY environment variable is required for position subscriptions")
+	tokenID := os.Getenv("LIMITLESS_API_TOKEN_ID")
+	tokenSecret := os.Getenv("LIMITLESS_API_TOKEN_SECRET")
+
+	opts := []limitless.ClientOption{
+		limitless.WithLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
+	}
+	switch {
+	case tokenID != "" || tokenSecret != "":
+		if tokenID == "" || tokenSecret == "" {
+			log.Fatal("both LIMITLESS_API_TOKEN_ID and LIMITLESS_API_TOKEN_SECRET are required for scoped API-key auth")
+		}
+		opts = append(opts, limitless.WithHMACCredentials(limitless.HMACCredentials{
+			TokenID: tokenID,
+			Secret:  tokenSecret,
+		}))
+	case apiKey != "":
+		opts = append(opts, limitless.WithAPIKey(apiKey))
+	default:
+		log.Fatal("LIMITLESS_API_KEY or LIMITLESS_API_TOKEN_ID/LIMITLESS_API_TOKEN_SECRET is required for authenticated subscriptions")
 	}
 
-	ws := limitless.NewWebSocketClient(
-		limitless.WithWebSocketAPIKey(apiKey),
-		limitless.WithWebSocketLogger(limitless.NewConsoleLogger(limitless.LogLevelInfo)),
-	)
+	sdk := limitless.NewClient(opts...)
+	ws := sdk.NewWebSocketClient()
 
 	// Register event handlers
 	ws.On("positions", func(data json.RawMessage) {
@@ -48,7 +62,10 @@ func main() {
 	defer ws.Disconnect()
 
 	// Subscribe to position updates
-	marketSlug := "will-btc-hit-100k"
+	marketSlug := os.Getenv("MARKET_SLUG")
+	if marketSlug == "" {
+		marketSlug = "will-btc-hit-100k"
+	}
 	if err := ws.Subscribe(ctx, limitless.ChannelSubscribePositions, limitless.SubscriptionOptions{
 		MarketSlugs: []string{marketSlug},
 	}); err != nil {

@@ -3,6 +3,7 @@ package limitless
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ func NewOrderBuilder(makerAddress string, feeRateBps int, priceTick ...float64) 
 
 // BuildOrder constructs an unsigned order from the given arguments.
 func (b *OrderBuilder) BuildOrder(args OrderArgs) (*UnsignedOrder, error) {
-	if err := b.validateOrderArgs(args); err != nil {
+	if err := validateOrderArgs(args, b.priceTick); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +113,7 @@ func (b *OrderBuilder) generateSalt() int64 {
 }
 
 func (b *OrderBuilder) calculateFOKAmounts(makerAmount float64) (int64, int64, error) {
-	amountStr := fmt.Sprintf("%v", makerAmount)
+	amountStr := strconv.FormatFloat(makerAmount, 'f', -1, 64)
 	decIdx := strings.Index(amountStr, ".")
 	if decIdx != -1 {
 		decPlaces := len(amountStr) - decIdx - 1
@@ -121,16 +122,19 @@ func (b *OrderBuilder) calculateFOKAmounts(makerAmount float64) (int64, int64, e
 		}
 	}
 
-	scaled := mathutil.ScaleTo6Decimals(makerAmount)
+	scaled, err := mathutil.ScaleTo6Decimals(makerAmount)
+	if err != nil {
+		return 0, 0, fmt.Errorf("makerAmount %v: %w", makerAmount, err)
+	}
 	return scaled, 1, nil
 }
 
 func (b *OrderBuilder) calculateGTCAmounts(price float64, size float64, side Side) (int64, int64, float64, error) {
 	scale := mathutil.Scale6
 
-	shares := mathutil.ParseDecToInt(fmt.Sprintf("%v", size), scale)
-	priceInt := mathutil.ParseDecToInt(fmt.Sprintf("%v", price), scale)
-	tickInt := mathutil.ParseDecToInt(fmt.Sprintf("%v", b.priceTick), scale)
+	shares := mathutil.ParseDecToInt(strconv.FormatFloat(size, 'f', -1, 64), scale)
+	priceInt := mathutil.ParseDecToInt(strconv.FormatFloat(price, 'f', -1, 64), scale)
+	tickInt := mathutil.ParseDecToInt(strconv.FormatFloat(b.priceTick, 'f', -1, 64), scale)
 
 	if tickInt.Sign() <= 0 {
 		return 0, 0, 0, fmt.Errorf("invalid priceTick: %v", b.priceTick)
@@ -157,12 +161,9 @@ func (b *OrderBuilder) calculateGTCAmounts(price float64, size float64, side Sid
 		}
 		validUp.Mul(validUp, sharesStep)
 
-		validSizeDown := float64(validDown.Int64()) / 1e6
-		validSizeUp := float64(validUp.Int64()) / 1e6
-
 		return 0, 0, 0, fmt.Errorf(
-			"invalid size: %v. Size must produce contracts divisible by %s (sharesStep). Try %v (rounded down) or %v (rounded up) instead",
-			size, sharesStep.String(), validSizeDown, validSizeUp,
+			"invalid size: %v. Size must produce contracts divisible by %s (sharesStep). Try %s (rounded down) or %s (rounded up) instead",
+			size, sharesStep.String(), formatScaledBigInt(validDown, 6), formatScaledBigInt(validUp, 6),
 		)
 	}
 
@@ -183,6 +184,13 @@ func (b *OrderBuilder) calculateGTCAmounts(price float64, size float64, side Sid
 		collateral = new(big.Int).Div(numerator, denominator)
 	}
 
+	if !collateral.IsInt64() {
+		return 0, 0, 0, fmt.Errorf("collateral overflow: value %s exceeds int64 range", collateral.String())
+	}
+	if !shares.IsInt64() {
+		return 0, 0, 0, fmt.Errorf("shares overflow: value %s exceeds int64 range", shares.String())
+	}
+
 	var makerAmount, takerAmount int64
 	if side == SideBuy {
 		makerAmount = collateral.Int64()
@@ -193,44 +201,6 @@ func (b *OrderBuilder) calculateGTCAmounts(price float64, size float64, side Sid
 	}
 
 	return makerAmount, takerAmount, price, nil
-}
-
-func (b *OrderBuilder) validateOrderArgs(args OrderArgs) error {
-	switch a := args.(type) {
-	case FOKOrderArgs:
-		if a.TokenID == "" || a.TokenID == "0" {
-			return fmt.Errorf("invalid tokenId: tokenId is required")
-		}
-		if a.MakerAmount <= 0 {
-			return fmt.Errorf("invalid makerAmount: %v. Maker amount must be positive", a.MakerAmount)
-		}
-		if a.Taker != "" && !isValidAddress(a.Taker) {
-			return fmt.Errorf("invalid taker address: %s", a.Taker)
-		}
-
-	case GTCOrderArgs:
-		if a.TokenID == "" || a.TokenID == "0" {
-			return fmt.Errorf("invalid tokenId: tokenId is required")
-		}
-		if a.Price < 0 || a.Price > 1 {
-			return fmt.Errorf("invalid price: %v. Price must be between 0 and 1", a.Price)
-		}
-		if a.Size <= 0 {
-			return fmt.Errorf("invalid size: %v. Size must be positive", a.Size)
-		}
-		// Validate price has max 3 decimals
-		priceStr := fmt.Sprintf("%v", a.Price)
-		if idx := strings.Index(priceStr, "."); idx != -1 {
-			if len(priceStr)-idx-1 > 3 {
-				return fmt.Errorf("invalid price: %v. Price must have max 3 decimal places (e.g., 0.380, 0.001)", a.Price)
-			}
-		}
-		if a.Taker != "" && !isValidAddress(a.Taker) {
-			return fmt.Errorf("invalid taker address: %s", a.Taker)
-		}
-	}
-
-	return nil
 }
 
 func tokenIDFromArgs(args OrderArgs) string {

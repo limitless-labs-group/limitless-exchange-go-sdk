@@ -21,7 +21,7 @@ coverage.html
 bin/
 build/
 dist/
-
+.serena
 # Go workspace files (project uses go.mod)
 go.work
 go.work.sum

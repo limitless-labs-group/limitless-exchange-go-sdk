@@ -1,6 +1,11 @@
 package limitless
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+)
 
 // WebSocketState represents the WebSocket connection state.
 type WebSocketState string
@@ -17,12 +22,12 @@ const (
 type SubscriptionChannel string
 
 const (
-	ChannelOrderbook            SubscriptionChannel = "orderbook"
-	ChannelTrades               SubscriptionChannel = "trades"
-	ChannelOrders               SubscriptionChannel = "orders"
-	ChannelFills                SubscriptionChannel = "fills"
-	ChannelMarkets              SubscriptionChannel = "markets"
-	ChannelPrices               SubscriptionChannel = "prices"
+	ChannelOrderbook             SubscriptionChannel = "orderbook"
+	ChannelTrades                SubscriptionChannel = "trades"
+	ChannelOrders                SubscriptionChannel = "orders"
+	ChannelFills                 SubscriptionChannel = "fills"
+	ChannelMarkets               SubscriptionChannel = "markets"
+	ChannelPrices                SubscriptionChannel = "prices"
 	ChannelSubscribeMarketPrices SubscriptionChannel = "subscribe_market_prices"
 	ChannelSubscribePositions    SubscriptionChannel = "subscribe_positions"
 	ChannelSubscribeTransactions SubscriptionChannel = "subscribe_transactions"
@@ -30,12 +35,37 @@ const (
 
 // SubscriptionOptions contains options for a WebSocket subscription.
 type SubscriptionOptions struct {
-	MarketSlug       string   `json:"marketSlug,omitempty"`
-	MarketSlugs      []string `json:"marketSlugs,omitempty"`
-	MarketAddress    string   `json:"marketAddress,omitempty"`
-	MarketAddresses  []string `json:"marketAddresses,omitempty"`
-	Filters          map[string]interface{} `json:"filters,omitempty"`
+	MarketSlug      string                 `json:"marketSlug,omitempty"`
+	MarketSlugs     []string               `json:"marketSlugs,omitempty"`
+	MarketAddress   string                 `json:"marketAddress,omitempty"`
+	MarketAddresses []string               `json:"marketAddresses,omitempty"`
+	Filters         map[string]interface{} `json:"filters,omitempty"`
 }
+
+// flexFloat unmarshals a JSON value that may be either a number or a string containing a number.
+type flexFloat float64
+
+func (f *flexFloat) UnmarshalJSON(data []byte) error {
+	// Try number first
+	var n float64
+	if err := json.Unmarshal(data, &n); err == nil {
+		*f = flexFloat(n)
+		return nil
+	}
+	// Try quoted string
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return fmt.Errorf("flexFloat: cannot parse %q: %w", s, err)
+		}
+		*f = flexFloat(n)
+		return nil
+	}
+	return fmt.Errorf("flexFloat: cannot unmarshal %s", string(data))
+}
+
+func (f flexFloat) Float64() float64 { return float64(f) }
 
 // OrderbookData contains orderbook data within an update event.
 type OrderbookData struct {
@@ -43,14 +73,14 @@ type OrderbookData struct {
 	Asks             []OrderBookEntry `json:"asks"`
 	TokenID          string           `json:"tokenId"`
 	AdjustedMidpoint float64          `json:"adjustedMidpoint"`
-	MaxSpread        float64          `json:"maxSpread"`
-	MinSize          float64          `json:"minSize"`
+	MaxSpread        flexFloat        `json:"maxSpread"`
+	MinSize          flexFloat        `json:"minSize"`
 }
 
 // OrderbookUpdate is the orderbook update event from the WebSocket.
 type OrderbookUpdate struct {
-	MarketSlug string        `json:"marketSlug"`
-	Orderbook  OrderbookData `json:"orderbook"`
+	MarketSlug string          `json:"marketSlug"`
+	Orderbook  OrderbookData   `json:"orderbook"`
 	Timestamp  json.RawMessage `json:"timestamp"` // Can be string, number, or date
 }
 
@@ -66,14 +96,14 @@ type TradeEvent struct {
 
 // OrderUpdate is emitted when an order status changes.
 type OrderUpdate struct {
-	OrderID    string  `json:"orderId"`
-	MarketSlug string  `json:"marketSlug"`
-	Side       string  `json:"side"` // "BUY" or "SELL"
+	OrderID    string   `json:"orderId"`
+	MarketSlug string   `json:"marketSlug"`
+	Side       string   `json:"side"` // "BUY" or "SELL"
 	Price      *float64 `json:"price,omitempty"`
-	Size       float64 `json:"size"`
-	Filled     float64 `json:"filled"`
-	Status     string  `json:"status"` // "OPEN", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
-	Timestamp  float64 `json:"timestamp"`
+	Size       float64  `json:"size"`
+	Filled     float64  `json:"filled"`
+	Status     string   `json:"status"` // "OPEN", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
+	Timestamp  float64  `json:"timestamp"`
 }
 
 // FillEvent is emitted when an order is filled.
@@ -129,10 +159,30 @@ type TransactionEvent struct {
 	Side             *string `json:"side,omitempty"` // "BUY" or "SELL"
 }
 
+// MarketCreatedEvent is emitted when a market becomes visible to websocket lifecycle subscribers.
+type MarketCreatedEvent struct {
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Type        string    `json:"type"` // "AMM" or "CLOB"
+	GroupSlug   *string   `json:"groupSlug,omitempty"`
+	CategoryIDs []int     `json:"categoryIds,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// MarketResolvedEvent is emitted when a market resolves.
+type MarketResolvedEvent struct {
+	Slug           string    `json:"slug"`
+	Type           string    `json:"type"`           // "AMM" or "CLOB"
+	WinningOutcome string    `json:"winningOutcome"` // "YES" or "NO"
+	WinningIndex   int       `json:"winningIndex"`   // 0 or 1
+	ResolutionDate time.Time `json:"resolutionDate"`
+}
+
 // WebSocketConfig contains WebSocket connection configuration.
 type WebSocketConfig struct {
 	URL                  string
 	APIKey               string
+	HMACCreds            *HMACCredentials
 	AutoReconnect        bool
 	ReconnectDelayMs     int
 	MaxReconnectAttempts int // 0 = infinite

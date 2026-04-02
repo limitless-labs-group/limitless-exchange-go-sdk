@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +110,20 @@ func TestMarketFetcher_GetOrderBook(t *testing.T) {
 	}
 	if len(ob.Bids) != 1 || len(ob.Asks) != 1 {
 		t.Fatalf("expected one bid and one ask, got bids=%d asks=%d", len(ob.Bids), len(ob.Asks))
+	}
+}
+
+func TestMarketFetcher_GetUserOrders_RequiresAPIKey(t *testing.T) {
+	t.Parallel()
+
+	client := NewHttpClient(WithBaseURL("https://example.com"))
+	fetcher := NewMarketFetcher(client)
+
+	_, err := fetcher.GetUserOrders(context.Background(), "btc")
+	if err == nil {
+		t.Fatal("expected GetUserOrders to fail without API key")
+	}
+	if !strings.Contains(err.Error(), "WithAPIKey") {
+		t.Fatalf("expected error to mention WithAPIKey, got: %v", err)
 	}
 }

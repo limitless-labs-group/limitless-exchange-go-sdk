@@ -1,6 +1,6 @@
 # Limitless Exchange Go SDK
 
-**v1.0.3** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.4** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
@@ -25,11 +25,12 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 
 ## Features
 
-- **Authentication**: API key authentication with X-API-Key header
+- **Authentication**: Legacy API-key auth and new scoped API-key auth
 - **Order Management**: Create, cancel, and manage orders on CLOB and NegRisk markets
+- **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
-- **Error Handling & Retry**: Automatic retry logic for rate limits and transient failures
+- **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
 - **WebSocket**: Real-time orderbook, trade, position, and transaction streaming
 - **Market Pages & Navigation**: Navigation tree, path-based page resolution, property filters
 - **Portfolio**: Position tracking, user history, and profile access
@@ -38,10 +39,10 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.3
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.4
 ```
 
-Requires Go 1.22 or later.
+Requires Go 1.24 or later.
 
 ## Quick Start
 
@@ -59,19 +60,18 @@ import (
 )
 
 func main() {
-    client := limitless.NewHttpClient()
-    fetcher := limitless.NewMarketFetcher(client)
+    sdk := limitless.NewClient()
     ctx := context.Background()
 
     // Fetch a single market
-    market, err := fetcher.GetMarket(ctx, "your-market-slug")
+    market, err := sdk.Markets.GetMarket(ctx, "your-market-slug")
     if err != nil {
         log.Fatal(err)
     }
     fmt.Printf("Market: %s\n", market.Title)
 
     // Fetch orderbook
-    ob, err := fetcher.GetOrderBook(ctx, market.Slug)
+    ob, err := sdk.Markets.GetOrderBook(ctx, market.Slug)
     if err != nil {
         log.Fatal(err)
     }
@@ -79,7 +79,7 @@ func main() {
         ob.AdjustedMidpoint, len(ob.Bids), len(ob.Asks))
 
     // Fetch active markets with sorting and pagination
-    resp, err := fetcher.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
+    resp, err := sdk.Markets.GetActiveMarkets(ctx, &limitless.ActiveMarketsParams{
         Limit:  10,
         SortBy: limitless.SortByNewest,
     })
@@ -92,20 +92,36 @@ func main() {
 
 ### Authentication
 
-The SDK uses API keys for authentication. API keys can be obtained from your Limitless Exchange account settings (User Profile).
+The SDK supports two authenticated modes:
+
+- Legacy API keys via `X-API-Key`
+- New scoped API keys via HMAC headers (`lmts-api-key`, `lmts-timestamp`, `lmts-signature`)
 
 ```go
-// Option 1: Automatic from environment variable (recommended)
-// Set LIMITLESS_API_KEY in your environment or .env file
-client := limitless.NewHttpClient()
-
-// Option 2: Explicit API key
-client := limitless.NewHttpClient(
-    limitless.WithAPIKey("your-api-key"),
+// Legacy API key
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
 )
 
-// All requests automatically include the X-API-Key header
+// New scoped API key
+sdk := limitless.NewClient(
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
+)
 ```
+
+Environment auto-loading: `NewHttpClient()` and `NewWebSocketClient()` can read `LIMITLESS_API_KEY` from the environment when no explicit API key is provided. `WithAPIKey(...)` remains fully supported and is the clearest way to configure API-key auth in application code.
+
+Use partner HMAC credentials only in a backend or BFF service. Do not expose `LIMITLESS_API_TOKEN_ID` / `LIMITLESS_API_TOKEN_SECRET` in browser code or client-side storage.
+
+Recommended setup:
+
+- Keep public market and market-page reads in the browser.
+- Store the real HMAC credentials on your backend.
+- Use this SDK server-side to sign partner-authenticated requests.
+- Expose only your own app-specific endpoints to the frontend.
 
 **Environment Variables:**
 
@@ -115,11 +131,22 @@ Create a `.env` file:
 # Required for authenticated endpoints
 LIMITLESS_API_KEY=your_api_key_here
 
+# Optional: new scoped API-key auth
+LIMITLESS_API_TOKEN_ID=your_api_token_id
+LIMITLESS_API_TOKEN_SECRET=your_api_token_secret
+
+# Optional: Privy bootstrap for self-service partner capabilities / derive token
+LIMITLESS_IDENTITY_TOKEN=your_privy_identity_token
+
 # Required for order signing (EIP-712)
 PRIVATE_KEY=your_private_key_hex
 
 # Market to trade
 MARKET_SLUG=your-market-slug
+
+# Required for delegated order examples
+LIMITLESS_PARTNER_PROFILE_ID=12345
+LIMITLESS_TARGET_FEE_RATE_BPS=300
 ```
 
 ### Token Approvals
@@ -137,21 +164,17 @@ MARKET_SLUG=your-market-slug
 ### Placing a GTC (Limit) Order
 
 ```go
-client := limitless.NewHttpClient(
+sdk := limitless.NewClient(
     limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
 )
-fetcher := limitless.NewMarketFetcher(client)
 
 ctx := context.Background()
 
 // Fetch market for token IDs and venue
-market, _ := fetcher.GetMarket(ctx, "your-market-slug")
+market, _ := sdk.Markets.GetMarket(ctx, "your-market-slug")
 
 // Create order client with private key
-orderClient, _ := limitless.NewOrderClient(
-    client, os.Getenv("PRIVATE_KEY"),
-    limitless.WithOrderMarketFetcher(fetcher),
-)
+orderClient, _ := sdk.NewOrderClient(os.Getenv("PRIVATE_KEY"))
 
 // Place a GTC BUY order at 0.50 for 10 shares
 resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
@@ -215,8 +238,13 @@ msg, err := orderClient.CancelAll(ctx, "market-slug")
 ### WebSocket (Real-Time Streaming)
 
 ```go
-ws := limitless.NewWebSocketClient(
-    limitless.WithWebSocketAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+sdk := limitless.NewClient(
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
+)
+ws := sdk.NewWebSocketClient(
     limitless.WithAutoReconnect(true),
 )
 
@@ -241,6 +269,38 @@ ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
 })
 ```
 
+### Scoped API Keys & Delegated Orders
+
+```go
+sdk := limitless.NewClient(
+    limitless.WithHMACCredentials(limitless.HMACCredentials{
+        TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+        Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+    }),
+)
+
+// List active scoped API keys
+tokens, _ := sdk.ApiTokens.ListTokens(ctx)
+
+// Fetch partner capabilities with a Privy identity token
+capabilities, _ := sdk.ApiTokens.GetCapabilities(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"))
+
+// Place an order signed by the API on behalf of a partner-managed profile
+resp, _ := sdk.DelegatedOrders.CreateOrder(ctx, limitless.CreateDelegatedOrderParams{
+    MarketSlug: "your-market-slug",
+    OrderType:  limitless.OrderTypeGTC,
+    OnBehalfOf: 12345,
+    FeeRateBps: 300,
+    Args: limitless.GTCOrderArgs{
+        TokenID: "token-id",
+        Side:    limitless.SideBuy,
+        Price:   0.500,
+        Size:    10.0,
+    },
+})
+_ = resp
+```
+
 **Available Channels:**
 
 | Channel | Auth Required | Description |
@@ -258,51 +318,55 @@ ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
 ### Portfolio & Profile
 
 ```go
-pf := limitless.NewPortfolioFetcher(client)
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+)
 
 // Fetch user profile
-profile, _ := pf.GetProfile(ctx, "0xYourWalletAddress")
+profile, _ := sdk.Portfolio.GetProfile(ctx, "0xYourWalletAddress")
 
 // Fetch positions
-positions, _ := pf.GetPositions(ctx)
+positions, _ := sdk.Portfolio.GetPositions(ctx)
 fmt.Printf("CLOB: %d positions | AMM: %d positions\n",
     len(positions.CLOB), len(positions.AMM))
 
 // Fetch user history
-history, _ := pf.GetUserHistory(ctx, 1, 10)
+history, _ := sdk.Portfolio.GetUserHistory(ctx, 1, 10)
 ```
 
-### User Orders (Fluent API)
+### User Orders
 
 ```go
-// Via MarketFetcher
-orders, _ := fetcher.GetUserOrders(ctx, "market-slug")
+// Prefer the service API
+orders, _ := sdk.Markets.GetUserOrders(ctx, "market-slug")
 
-// Or via Market instance (fluent API)
-market, _ := fetcher.GetMarket(ctx, "market-slug")
+// Legacy fluent API remains available for backward compatibility
+market, _ := sdk.Markets.GetMarket(ctx, "market-slug")
 orders, _ := market.GetUserOrders(ctx)
 ```
 
 ### Market Pages & Navigation
 
 ```go
-pageFetcher := limitless.NewMarketPageFetcher(client)
+sdk := limitless.NewClient(
+    limitless.WithAPIKey(os.Getenv("LIMITLESS_API_KEY")),
+)
 
 // Get navigation tree
-nav, _ := pageFetcher.GetNavigation(ctx)
+nav, _ := sdk.Pages.GetNavigation(ctx)
 
 // Resolve a page by URL path (handles 301 redirects)
-page, _ := pageFetcher.GetMarketPageByPath(ctx, "/crypto")
+page, _ := sdk.Pages.GetMarketPageByPath(ctx, "/crypto")
 
 // Fetch markets for a page with filters
-markets, _ := pageFetcher.GetMarkets(ctx, page.ID, &limitless.MarketPageMarketsParams{
+markets, _ := sdk.Pages.GetMarkets(ctx, page.ID, &limitless.MarketPageMarketsParams{
     Limit: intPtr(20),
     Sort:  "-updatedAt",
 })
 
 // Browse filter options
-keys, _ := pageFetcher.GetPropertyKeys(ctx)
-options, _ := pageFetcher.GetPropertyOptions(ctx, keys[0].ID, nil)
+keys, _ := sdk.Pages.GetPropertyKeys(ctx)
+options, _ := sdk.Pages.GetPropertyOptions(ctx, keys[0].ID, nil)
 ```
 
 ### Error Handling & Retry
@@ -344,7 +408,7 @@ result, err := limitless.WithRetry(ctx, func() (*Response, error) {
 // Console logger with configurable level
 logger := limitless.NewConsoleLogger(limitless.LogLevelDebug)
 
-client := limitless.NewHttpClient(
+sdk := limitless.NewClient(
     limitless.WithLogger(logger),
 )
 
@@ -366,17 +430,21 @@ type Logger interface {
 
 ## Examples
 
-Runnable examples are available in the [`examples/`](./examples) directory:
+Runnable examples are available in the [`examples/`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples) directory:
 
 | Example | Description | Auth Required |
 |---------|-------------|:---:|
-| [`active_markets`](./examples/active_markets) | Fetch active markets with pagination and sorting | No |
-| [`clob_gtc_order`](./examples/clob_gtc_order) | Place a GTC (limit) order | Yes |
-| [`clob_fok_order`](./examples/clob_fok_order) | Place a FOK (market) order | Yes |
-| [`negrisk_order`](./examples/negrisk_order) | Trade on NegRisk group markets | Yes |
-| [`portfolio`](./examples/portfolio) | Fetch profile, positions, and history | Yes |
-| [`websocket_orderbook`](./examples/websocket_orderbook) | Stream live orderbook updates | No |
-| [`websocket_positions`](./examples/websocket_positions) | Stream position and transaction updates | Yes |
+| [`active_markets`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/active_markets) | Fetch active markets with pagination and sorting | No |
+| [`clob_gtc_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_gtc_order) | Place a GTC (limit) order | Yes |
+| [`clob_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_fok_order) | Place a FOK (market) order | Yes |
+| [`negrisk_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/negrisk_order) | Trade on NegRisk group markets | Yes |
+| [`portfolio`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/portfolio) | Fetch profile, positions, and history | Yes |
+| [`api_tokens`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
+| [`delegated_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_order) | Place a delegated partner order | Scoped API key |
+| [`delegated_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_fok_order) | Place a delegated FOK partner order | Scoped API key |
+| [`e2e_fok_flow`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/e2e_fok_flow) | End-to-end partner delegated FOK flow without cleanup | Scoped API key / Privy |
+| [`websocket_orderbook`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_orderbook) | Stream live orderbook updates | No |
+| [`websocket_positions`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_positions) | Stream position and transaction updates | Yes |
 
 Run any example:
 
@@ -423,6 +491,10 @@ examples/
 ├── clob_fok_order/        # Place FOK market orders
 ├── negrisk_order/         # NegRisk group market trading
 ├── portfolio/             # Profile and position fetching
+├── api_tokens/            # Scoped API-key listing and capability lookup
+├── delegated_order/       # Delegated partner order placement
+├── delegated_fok_order/   # Delegated FOK partner order placement
+├── e2e_fok_flow/          # End-to-end partner delegated FOK flow
 ├── websocket_orderbook/   # Live orderbook streaming
 └── websocket_positions/   # Position and transaction streaming
 
@@ -439,7 +511,7 @@ The SDK has minimal external dependencies:
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## License
 
