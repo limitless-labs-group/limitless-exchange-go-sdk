@@ -8,22 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 )
-
-const sdkID = "lmts-sdk-go"
-
-// sdkVersion is injected at release build time via -ldflags.
-var sdkVersion = "1.0.4"
-
-func resolveSDKVersion() string {
-	if sdkVersion != "" {
-		return sdkVersion
-	}
-	return "0.0.0"
-}
 
 // RawResponse holds the HTTP response metadata alongside the decoded body.
 type RawResponse struct {
@@ -44,13 +31,14 @@ type HttpClient struct {
 
 // NewHttpClient creates a new HTTP client with the given options.
 func NewHttpClient(opts ...ClientOption) *HttpClient {
-	sdkToken := fmt.Sprintf("%s/%s", sdkID, resolveSDKVersion())
-	userAgent := fmt.Sprintf("%s (go/%s)", sdkToken, runtime.Version())
 	transport := &http.Transport{
 		MaxIdleConns:        50,
 		MaxIdleConnsPerHost: 50,
 		IdleConnTimeout:     60 * time.Second,
 	}
+	headers := sdkTrackingHeaders()
+	headers["Content-Type"] = "application/json"
+	headers["Accept"] = "application/json"
 
 	c := &HttpClient{
 		httpClient: &http.Client{
@@ -59,12 +47,7 @@ func NewHttpClient(opts ...ClientOption) *HttpClient {
 		},
 		baseURL: DefaultAPIURL,
 		logger:  NewNoOpLogger(),
-		headers: map[string]string{
-			"user-agent":    userAgent,
-			"x-sdk-version": sdkToken,
-			"Content-Type":  "application/json",
-			"Accept":        "application/json",
-		},
+		headers: headers,
 	}
 
 	for _, opt := range opts {

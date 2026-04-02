@@ -3,7 +3,6 @@ package limitless
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -70,18 +69,9 @@ func newSocketIOClient(wsURL, namespace string, apiKey string, hmacCreds *HMACCr
 	// Socket.IO uses /socket.io/ path with EIO=4 and transport=websocket
 	u := wsURL + "/socket.io/?EIO=4&transport=websocket"
 
-	header := http.Header{}
-	if hmacCreds != nil {
-		timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-		signature, err := computeHMACSignature(hmacCreds.Secret, timestamp, http.MethodGet, "/socket.io/?EIO=4&transport=websocket", "")
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute websocket HMAC signature: %w", err)
-		}
-		header.Set("lmts-api-key", hmacCreds.TokenID)
-		header.Set("lmts-timestamp", timestamp)
-		header.Set("lmts-signature", signature)
-	} else if apiKey != "" {
-		header.Set("X-API-Key", apiKey)
+	header, err := buildWebSocketHeaders(apiKey, hmacCreds)
+	if err != nil {
+		return nil, err
 	}
 
 	logger.Debug("Connecting WebSocket", map[string]any{"url": u})

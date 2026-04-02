@@ -3,6 +3,8 @@ package limitless
 import (
 	"context"
 	"encoding/json"
+	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -215,6 +217,52 @@ func TestWebSocketClient_OnMarketResolved_Parsing(t *testing.T) {
 	}
 	if received.WinningIndex != 0 {
 		t.Fatalf("expected winningIndex 0, got %d", received.WinningIndex)
+	}
+}
+
+func TestBuildWebSocketHeaders_IncludesSDKTrackingHeadersWithoutAuth(t *testing.T) {
+	t.Parallel()
+
+	headers, err := buildWebSocketHeaders("", nil)
+	if err != nil {
+		t.Fatalf("expected websocket headers without auth to succeed, got %v", err)
+	}
+
+	if got := headers.Get("x-sdk-version"); got == "" {
+		t.Fatal("expected x-sdk-version header to be present")
+	}
+	if got := headers.Get("user-agent"); got == "" {
+		t.Fatal("expected user-agent header to be present")
+	} else if want := "go/" + runtime.Version(); !strings.Contains(got, want) {
+		t.Fatalf("expected user-agent %q to contain %q", got, want)
+	}
+	if got := headers.Get("X-API-Key"); got != "" {
+		t.Fatalf("expected X-API-Key to be omitted without auth, got %q", got)
+	}
+}
+
+func TestBuildWebSocketHeaders_IncludesTrackingHeadersWithHMAC(t *testing.T) {
+	t.Parallel()
+
+	headers, err := buildWebSocketHeaders("", &HMACCredentials{
+		TokenID: "token-123",
+		Secret:  "c2VjcmV0",
+	})
+	if err != nil {
+		t.Fatalf("expected websocket headers with HMAC to succeed, got %v", err)
+	}
+
+	if got := headers.Get("x-sdk-version"); got == "" {
+		t.Fatal("expected x-sdk-version header to be present")
+	}
+	if got := headers.Get("user-agent"); got == "" {
+		t.Fatal("expected user-agent header to be present")
+	}
+	if got := headers.Get("lmts-api-key"); got != "token-123" {
+		t.Fatalf("expected lmts-api-key token-123, got %q", got)
+	}
+	if got := headers.Get("lmts-signature"); got == "" {
+		t.Fatal("expected lmts-signature header to be present")
 	}
 }
 
