@@ -4,6 +4,23 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-04-09
+
+### Added
+
+- `FAK` (Fill-And-Kill) limit-order support alongside existing `GTC` and `FOK` flows:
+  - `OrderTypeFAK`
+  - `FAKOrderArgs`
+  - shared limit-order amount construction and validation for `GTC` + `FAK`
+- New public examples and README coverage for:
+  - `FAK` limit-order placement
+  - `GTC` `postOnly` usage
+
+### Changed
+
+- `postOnly` is now documented and demonstrated as a `GTC`-only flag.
+- README installation and release metadata now target `v1.0.5`.
+
 ## [1.0.4] - 2026-04-02
 
 ### Added
