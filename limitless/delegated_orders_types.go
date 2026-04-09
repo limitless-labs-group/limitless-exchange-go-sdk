@@ -34,4 +34,5 @@ type CreateOrderRequest struct {
 	MarketSlug string          `json:"marketSlug"`
 	OwnerID    int             `json:"ownerId"`
 	OnBehalfOf *int            `json:"onBehalfOf,omitempty"`
+	PostOnly   *bool           `json:"postOnly,omitempty"`
 }

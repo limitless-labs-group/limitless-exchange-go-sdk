@@ -223,6 +223,16 @@ func sideFromArgs(args OrderArgs) Side {
 	return SideBuy
 }
 
+// postOnlyFromArgs returns a pointer to the PostOnly flag for GTC args when set,
+// or nil so the field is omitted from the JSON payload.
+func postOnlyFromArgs(args OrderArgs) *bool {
+	if a, ok := args.(GTCOrderArgs); ok && a.PostOnly {
+		v := true
+		return &v
+	}
+	return nil
+}
+
 // isValidAddress does a basic Ethereum address format check.
 func isValidAddress(addr string) bool {
 	if len(addr) != 42 {

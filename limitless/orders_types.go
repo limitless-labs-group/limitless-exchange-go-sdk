@@ -55,6 +55,7 @@ type GTCOrderArgs struct {
 	Expiration string
 	Nonce      *int
 	Taker      string
+	PostOnly   bool // Optional. When true, rejects the order if it would immediately match. Default false.
 }
 
 func (GTCOrderArgs) orderArgs() {}
@@ -105,6 +106,7 @@ type NewOrderPayload struct {
 	OrderType  OrderType   `json:"orderType"`
 	MarketSlug string      `json:"marketSlug"`
 	OwnerID    int         `json:"ownerId"`
+	PostOnly   *bool       `json:"postOnly,omitempty"`
 }
 
 // CreatedOrder contains order data returned from the API.
