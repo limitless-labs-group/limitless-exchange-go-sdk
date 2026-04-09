@@ -119,6 +119,37 @@ func TestOrderBuilder_BuildOrder_GTC_BuyAndSellAmounts(t *testing.T) {
 	}
 }
 
+func TestOrderBuilder_BuildOrder_FAK_PreservesTokenIDAndSide(t *testing.T) {
+	t.Parallel()
+
+	builder := NewOrderBuilder("0xa00BCB04073B243E8A55f3B5899AefF596bF17C6", 300)
+	order, err := builder.BuildOrder(FAKOrderArgs{
+		TokenID: "12345",
+		Side:    SideSell,
+		Price:   0.381,
+		Size:    1.234,
+	})
+	if err != nil {
+		t.Fatalf("BuildOrder(FAK) returned error: %v", err)
+	}
+
+	if order.TokenID != "12345" {
+		t.Fatalf("expected tokenId 12345, got %q", order.TokenID)
+	}
+	if order.Side != SideSell {
+		t.Fatalf("expected side %v, got %v", SideSell, order.Side)
+	}
+	if order.MakerAmount != 1234000 {
+		t.Fatalf("expected maker amount 1234000, got %d", order.MakerAmount)
+	}
+	if order.TakerAmount != 470154 {
+		t.Fatalf("expected taker amount 470154, got %d", order.TakerAmount)
+	}
+	if order.Price == nil || *order.Price != 0.381 {
+		t.Fatalf("expected price 0.381, got %+v", order.Price)
+	}
+}
+
 func TestOrderBuilder_BuildOrder_GTC_RejectsNonTickAlignedPrice(t *testing.T) {
 	t.Parallel()
 
