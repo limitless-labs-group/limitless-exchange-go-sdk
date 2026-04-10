@@ -295,3 +295,43 @@ func TestHttpClient_HMACPatchAndIdentityOverride(t *testing.T) {
 		t.Fatalf("PostWithHeaders returned error: %v", err)
 	}
 }
+
+func TestHttpClient_HMACWithTrailingSlashBaseURL(t *testing.T) {
+	t.Parallel()
+
+	secret := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/profiles/0xabc", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.RequestURI(); got != "/profiles/0xabc" {
+			t.Fatalf("expected normalized request URI, got %q", got)
+		}
+		if got := r.Header.Get("lmts-api-key"); got != "token-1" {
+			t.Fatalf("expected lmts-api-key token-1, got %q", got)
+		}
+		expectedSig, err := computeHMACSignature(secret, r.Header.Get("lmts-timestamp"), http.MethodGet, "/profiles/0xabc", "")
+		if err != nil {
+			t.Fatalf("failed to compute expected signature: %v", err)
+		}
+		if got := r.Header.Get("lmts-signature"); got != expectedSig {
+			t.Fatalf("expected lmts-signature %q, got %q", expectedSig, got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"account": "0xabc"})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client := NewHttpClient(
+		WithBaseURL(srv.URL+"/"),
+		WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: secret}),
+	)
+
+	var resp map[string]string
+	if err := client.Get(context.Background(), "/profiles/0xabc", &resp); err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if resp["account"] != "0xabc" {
+		t.Fatalf("expected account 0xabc, got %q", resp["account"])
+	}
+}

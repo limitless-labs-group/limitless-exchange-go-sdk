@@ -201,7 +201,7 @@ func (c *HttpClient) doRequestRaw(ctx context.Context, method, path string, body
 		return nil, err
 	}
 
-	url := c.baseURL + path
+	url := joinURL(c.baseURL, path)
 
 	// Use a transport-level redirect policy to prevent auto-follow
 	client := *c.httpClient
@@ -278,7 +278,7 @@ func (c *HttpClient) doRequestWithConfig(
 		return err
 	}
 
-	url := c.baseURL + path
+	url := joinURL(c.baseURL, path)
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -364,6 +364,25 @@ func (c *HttpClient) signAndSetHeaders(req *http.Request, bodyBytes []byte, over
 	}
 
 	return nil
+}
+
+func joinURL(baseURL, path string) string {
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+
+	if baseURL == "" {
+		if strings.HasPrefix(path, "/") {
+			return path
+		}
+		return "/" + path
+	}
+
+	if path == "" {
+		return strings.TrimRight(baseURL, "/")
+	}
+
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
 func (c *HttpClient) maskedHeadersForLog(extraHeaders map[string]string, identityToken string) map[string]string {

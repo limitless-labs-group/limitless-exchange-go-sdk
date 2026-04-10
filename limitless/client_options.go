@@ -2,6 +2,7 @@ package limitless
 
 import (
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -12,7 +13,7 @@ type ClientOption func(*HttpClient)
 // Default: "https://api.limitless.exchange"
 func WithBaseURL(url string) ClientOption {
 	return func(c *HttpClient) {
-		c.baseURL = url
+		c.baseURL = strings.TrimRight(url, "/")
 	}
 }
 
