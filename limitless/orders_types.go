@@ -19,6 +19,7 @@ type OrderType string
 
 const (
 	OrderTypeFOK OrderType = "FOK"
+	OrderTypeFAK OrderType = "FAK"
 	OrderTypeGTC OrderType = "GTC"
 )
 
@@ -55,11 +56,28 @@ type GTCOrderArgs struct {
 	Expiration string
 	Nonce      *int
 	Taker      string
+	PostOnly   bool // Optional. When true, rejects the order if it would immediately match. Default false.
 }
 
 func (GTCOrderArgs) orderArgs() {}
 
-// OrderArgs is the interface satisfied by FOKOrderArgs and GTCOrderArgs.
+// FAKOrderArgs contains arguments for a Fill-And-Kill limit order.
+// FAK orders share the price/size construction with GTC, but the unmatched
+// remainder is killed instead of resting on the book. PostOnly is not supported
+// for FAK and is rejected by the API.
+type FAKOrderArgs struct {
+	TokenID    string
+	Side       Side
+	Price      float64 // 0.0-1.0, tick-aligned to 0.001
+	Size       float64 // Number of shares
+	Expiration string
+	Nonce      *int
+	Taker      string
+}
+
+func (FAKOrderArgs) orderArgs() {}
+
+// OrderArgs is the interface satisfied by FOKOrderArgs, GTCOrderArgs, and FAKOrderArgs.
 type OrderArgs interface {
 	orderArgs()
 }
@@ -105,6 +123,7 @@ type NewOrderPayload struct {
 	OrderType  OrderType   `json:"orderType"`
 	MarketSlug string      `json:"marketSlug"`
 	OwnerID    int         `json:"ownerId"`
+	PostOnly   *bool       `json:"postOnly,omitempty"`
 }
 
 // CreatedOrder contains order data returned from the API.

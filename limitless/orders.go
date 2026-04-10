@@ -194,6 +194,7 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 		OrderType:  params.OrderType,
 		MarketSlug: params.MarketSlug,
 		OwnerID:    userData.UserID,
+		PostOnly:   postOnlyFromArgs(params.Args),
 	}
 
 	// Submit to API

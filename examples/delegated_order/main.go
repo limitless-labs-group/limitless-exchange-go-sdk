@@ -62,10 +62,11 @@ func main() {
 		OnBehalfOf: targetProfileID,
 		FeeRateBps: feeRateBps,
 		Args: limitless.GTCOrderArgs{
-			TokenID: market.Tokens.Yes,
-			Side:    limitless.SideBuy,
-			Price:   0.050,
-			Size:    1.0,
+			TokenID:  market.Tokens.Yes,
+			Side:     limitless.SideBuy,
+			Price:    0.050,
+			Size:     1.0,
+			PostOnly: true,
 		},
 	})
 	if err != nil {

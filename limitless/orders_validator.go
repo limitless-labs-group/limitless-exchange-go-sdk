@@ -50,69 +50,76 @@ func validateOrderArgs(args OrderArgs, priceTick float64) error {
 		}
 
 	case GTCOrderArgs:
-		if err := validateTokenID(a.TokenID); err != nil {
-			return err
-		}
-		if a.Price <= 0 || a.Price > 1 {
-			return &OrderValidationError{Field: "price", Message: fmt.Sprintf("price must be between 0 and 1, got: %v", a.Price)}
-		}
-		if a.Size <= 0 {
-			return &OrderValidationError{Field: "size", Message: fmt.Sprintf("size must be positive, got: %v", a.Size)}
-		}
+		return validateLimitOrderArgs(a.TokenID, a.Price, a.Size, a.Expiration, a.Nonce, a.Taker, priceTick)
 
-		maxPriceDecimals := decimalPlaces(priceTick)
-		if decimals := decimalPlaces(a.Price); decimals > maxPriceDecimals {
-			return &OrderValidationError{
-				Field:   "price",
-				Message: fmt.Sprintf("price must have max %d decimal places, got: %v (%d decimals)", maxPriceDecimals, a.Price, decimals),
-			}
-		}
-		if decimals := decimalPlaces(a.Size); decimals > 6 {
-			return &OrderValidationError{
-				Field:   "size",
-				Message: fmt.Sprintf("size must have max 6 decimal places, got: %v (%d decimals)", a.Size, decimals),
-			}
-		}
-
-		scale := mathutil.Scale6
-		priceInt := mathutil.ParseDecToInt(strconv.FormatFloat(a.Price, 'f', -1, 64), scale)
-		tickInt := mathutil.ParseDecToInt(strconv.FormatFloat(priceTick, 'f', -1, 64), scale)
-		if tickInt.Sign() <= 0 {
-			return &OrderValidationError{Field: "price", Message: fmt.Sprintf("invalid priceTick: %v", priceTick)}
-		}
-		if new(big.Int).Mod(priceInt, tickInt).Sign() != 0 {
-			return &OrderValidationError{
-				Field:   "price",
-				Message: fmt.Sprintf("price %v is not tick-aligned. Must be multiple of %v (e.g., 0.380, 0.381, etc.)", a.Price, priceTick),
-			}
-		}
-
-		shares := mathutil.ParseDecToInt(strconv.FormatFloat(a.Size, 'f', -1, 64), scale)
-		sharesStep := new(big.Int).Div(scale, tickInt)
-		if new(big.Int).Mod(shares, sharesStep).Sign() != 0 {
-			validDown := new(big.Int).Div(new(big.Int).Set(shares), sharesStep)
-			validDown.Mul(validDown, sharesStep)
-			validUp, err := mathutil.DivCeil(shares, sharesStep)
-			if err != nil {
-				return &OrderValidationError{Field: "size", Message: fmt.Sprintf("failed to calculate valid size: %v", err)}
-			}
-			validUp.Mul(validUp, sharesStep)
-
-			return &OrderValidationError{
-				Field: "size",
-				Message: fmt.Sprintf(
-					"invalid size: %v. Size must produce contracts divisible by %s (sharesStep). Try %s (rounded down) or %s (rounded up) instead",
-					a.Size, sharesStep.String(), formatScaledBigInt(validDown, 6), formatScaledBigInt(validUp, 6),
-				),
-			}
-		}
-
-		if err := validateOptionalOrderFields(a.Taker, a.Expiration, a.Nonce); err != nil {
-			return err
-		}
+	case FAKOrderArgs:
+		return validateLimitOrderArgs(a.TokenID, a.Price, a.Size, a.Expiration, a.Nonce, a.Taker, priceTick)
 	}
 
 	return nil
+}
+
+// validateLimitOrderArgs validates the shared price/size fields used by
+// limit-like order types (GTC, FAK).
+func validateLimitOrderArgs(tokenID string, price, size float64, expiration string, nonce *int, taker string, priceTick float64) error {
+	if err := validateTokenID(tokenID); err != nil {
+		return err
+	}
+	if price <= 0 || price > 1 {
+		return &OrderValidationError{Field: "price", Message: fmt.Sprintf("price must be between 0 and 1, got: %v", price)}
+	}
+	if size <= 0 {
+		return &OrderValidationError{Field: "size", Message: fmt.Sprintf("size must be positive, got: %v", size)}
+	}
+
+	maxPriceDecimals := decimalPlaces(priceTick)
+	if decimals := decimalPlaces(price); decimals > maxPriceDecimals {
+		return &OrderValidationError{
+			Field:   "price",
+			Message: fmt.Sprintf("price must have max %d decimal places, got: %v (%d decimals)", maxPriceDecimals, price, decimals),
+		}
+	}
+	if decimals := decimalPlaces(size); decimals > 6 {
+		return &OrderValidationError{
+			Field:   "size",
+			Message: fmt.Sprintf("size must have max 6 decimal places, got: %v (%d decimals)", size, decimals),
+		}
+	}
+
+	scale := mathutil.Scale6
+	priceInt := mathutil.ParseDecToInt(strconv.FormatFloat(price, 'f', -1, 64), scale)
+	tickInt := mathutil.ParseDecToInt(strconv.FormatFloat(priceTick, 'f', -1, 64), scale)
+	if tickInt.Sign() <= 0 {
+		return &OrderValidationError{Field: "price", Message: fmt.Sprintf("invalid priceTick: %v", priceTick)}
+	}
+	if new(big.Int).Mod(priceInt, tickInt).Sign() != 0 {
+		return &OrderValidationError{
+			Field:   "price",
+			Message: fmt.Sprintf("price %v is not tick-aligned. Must be multiple of %v (e.g., 0.380, 0.381, etc.)", price, priceTick),
+		}
+	}
+
+	shares := mathutil.ParseDecToInt(strconv.FormatFloat(size, 'f', -1, 64), scale)
+	sharesStep := new(big.Int).Div(scale, tickInt)
+	if new(big.Int).Mod(shares, sharesStep).Sign() != 0 {
+		validDown := new(big.Int).Div(new(big.Int).Set(shares), sharesStep)
+		validDown.Mul(validDown, sharesStep)
+		validUp, err := mathutil.DivCeil(shares, sharesStep)
+		if err != nil {
+			return &OrderValidationError{Field: "size", Message: fmt.Sprintf("failed to calculate valid size: %v", err)}
+		}
+		validUp.Mul(validUp, sharesStep)
+
+		return &OrderValidationError{
+			Field: "size",
+			Message: fmt.Sprintf(
+				"invalid size: %v. Size must produce contracts divisible by %s (sharesStep). Try %s (rounded down) or %s (rounded up) instead",
+				size, sharesStep.String(), formatScaledBigInt(validDown, 6), formatScaledBigInt(validUp, 6),
+			),
+		}
+	}
+
+	return validateOptionalOrderFields(taker, expiration, nonce)
 }
 
 func validateTokenID(tokenID string) error {

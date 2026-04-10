@@ -1,8 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.4** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.5** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
+
+> **v1.0.5 Release**: Adds `FAK` limit-order support and `postOnly` for `GTC` orders. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -26,7 +28,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Features
 
 - **Authentication**: Legacy API-key auth and new scoped API-key auth
-- **Order Management**: Create, cancel, and manage orders on CLOB and NegRisk markets
+- **Order Management**: Create, cancel, and manage `GTC`, `FAK`, and `FOK` orders on CLOB and NegRisk markets, including `postOnly` for `GTC`
 - **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
@@ -39,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.4
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.5
 ```
 
 Requires Go 1.24 or later.
@@ -177,20 +179,51 @@ market, _ := sdk.Markets.GetMarket(ctx, "your-market-slug")
 orderClient, _ := sdk.NewOrderClient(os.Getenv("PRIVATE_KEY"))
 
 // Place a GTC BUY order at 0.50 for 10 shares
+// PostOnly is supported only for GTC orders.
 resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
     OrderType:  limitless.OrderTypeGTC,
     MarketSlug: market.Slug,
     Args: limitless.GTCOrderArgs{
-        TokenID: market.Tokens.Yes,
-        Side:    limitless.SideBuy,
-        Price:   0.50,
-        Size:    10.0,
+        TokenID:  market.Tokens.Yes,
+        Side:     limitless.SideBuy,
+        Price:    0.50,
+        Size:     10.0,
+        PostOnly: true,
     },
 })
 if err != nil {
     log.Fatal(err)
 }
 fmt.Printf("Order created: %s\n", resp.Order.ID)
+```
+
+### FAK Orders (Fill-and-Kill Limit Orders)
+
+FAK orders use the same `Price` + `Size` construction as `GTC`, but any unmatched remainder is cancelled immediately instead of resting on the orderbook.
+
+**Parameter Semantics:**
+- **BUY**: `Price` = max price to pay, `Size` = shares to buy
+- **SELL**: `Price` = min price to accept, `Size` = shares to sell
+- `PostOnly` is **not** supported for `FAK`
+
+```go
+// BUY FAK - fill up to 10 shares at 0.45 and kill the remainder
+resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
+    OrderType:  limitless.OrderTypeFAK,
+    MarketSlug: market.Slug,
+    Args: limitless.FAKOrderArgs{
+        TokenID: market.Tokens.Yes,
+        Side:    limitless.SideBuy,
+        Price:   0.45,
+        Size:    10.0,
+    },
+})
+
+if len(resp.MakerMatches) > 0 {
+    fmt.Printf("FAK matched immediately with %d fill(s)\n", len(resp.MakerMatches))
+} else {
+    fmt.Println("FAK did not match and the remainder was cancelled.")
+}
 ```
 
 ### FOK Orders (Fill-or-Kill Market Orders)
@@ -435,7 +468,8 @@ Runnable examples are available in the [`examples/`](https://github.com/limitles
 | Example | Description | Auth Required |
 |---------|-------------|:---:|
 | [`active_markets`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/active_markets) | Fetch active markets with pagination and sorting | No |
-| [`clob_gtc_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_gtc_order) | Place a GTC (limit) order | Yes |
+| [`clob_gtc_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_gtc_order) | Place a GTC (limit) order with `postOnly` | Yes |
+| [`clob_fak_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_fak_order) | Place a FAK (fill-and-kill) limit order | Yes |
 | [`clob_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/clob_fok_order) | Place a FOK (market) order | Yes |
 | [`negrisk_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/negrisk_order) | Trade on NegRisk group markets | Yes |
 | [`portfolio`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/portfolio) | Fetch profile, positions, and history | Yes |
@@ -476,7 +510,7 @@ limitless/
 ├── orders.go              # OrderClient (create, cancel, sign)
 ├── orders_builder.go      # Order amount calculation and tick validation
 ├── orders_signer.go       # EIP-712 signing
-├── orders_types.go        # Order, FOKOrderArgs, GTCOrderArgs types
+├── orders_types.go        # Order, GTCOrderArgs, FAKOrderArgs, FOKOrderArgs types
 ├── orders_validator.go    # Input validation
 ├── portfolio.go           # PortfolioFetcher (profile, positions, history)
 ├── portfolio_types.go     # UserProfile, CLOBPosition, AMMPosition types
@@ -487,7 +521,8 @@ limitless/
 
 examples/
 ├── active_markets/        # Fetch and display active markets
-├── clob_gtc_order/        # Place GTC limit orders
+├── clob_gtc_order/        # Place GTC limit orders (with postOnly)
+├── clob_fak_order/        # Place FAK limit orders
 ├── clob_fok_order/        # Place FOK market orders
 ├── negrisk_order/         # NegRisk group market trading
 ├── portfolio/             # Profile and position fetching

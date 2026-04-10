@@ -24,7 +24,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// Fetch market and orderbook
+	// Fetch market and orderbook so we can inspect the current midpoint.
 	marketSlug := "will-btc-hit-100k"
 	market, err := sdk.Markets.GetMarket(ctx, marketSlug)
 	if err != nil {
@@ -39,40 +39,37 @@ func main() {
 	fmt.Printf("Market: %s\n", market.Title)
 	fmt.Printf("Orderbook midpoint: %.3f\n\n", orderbook.AdjustedMidpoint)
 
-	// Create order client
 	orderClient, err := sdk.NewOrderClient(privateKey)
 	if err != nil {
 		log.Fatalf("Failed to create order client: %v", err)
 	}
 
-	// Place a GTC (Good-Til-Cancelled) limit order
-	// Price must be tick-aligned (multiple of 0.001)
-	// Size must produce contracts divisible by sharesStep
-	// PostOnly is supported only for GTC orders and rejects crossing orders.
+	// Place a FAK (Fill-And-Kill) limit order.
+	// FAK uses the same price + size inputs as GTC, but any unmatched remainder
+	// is cancelled immediately instead of resting on the book.
 	resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
-		OrderType:  limitless.OrderTypeGTC,
+		OrderType:  limitless.OrderTypeFAK,
 		MarketSlug: marketSlug,
-		Args: limitless.GTCOrderArgs{
-			TokenID:  market.Tokens.Yes,
-			Side:     limitless.SideBuy,
-			Price:    0.500, // 50 cents
-			Size:     10.0,  // 10 shares
-			PostOnly: true,
+		Args: limitless.FAKOrderArgs{
+			TokenID: market.Tokens.Yes,
+			Side:    limitless.SideBuy,
+			Price:   0.450, // Max price willing to pay
+			Size:    10.0,  // Shares to buy
 		},
 	})
 	if err != nil {
-		log.Fatalf("Failed to create order: %v", err)
+		log.Fatalf("Failed to create FAK order: %v", err)
 	}
 
-	fmt.Printf("Order created: %s\n", resp.Order.ID)
+	fmt.Printf("FAK order created: %s\n", resp.Order.ID)
 	fmt.Printf("  Price: %v\n", resp.Order.Price)
 	fmt.Printf("  Maker Amount: %d\n", resp.Order.MakerAmount)
 	fmt.Printf("  Taker Amount: %d\n", resp.Order.TakerAmount)
 
-	// Cancel the order
-	msg, err := orderClient.Cancel(ctx, resp.Order.ID)
-	if err != nil {
-		log.Fatalf("Failed to cancel order: %v", err)
+	if len(resp.MakerMatches) > 0 {
+		fmt.Printf("  Matched immediately with %d fill(s)\n", len(resp.MakerMatches))
+		return
 	}
-	fmt.Printf("Order cancelled: %s\n", msg)
+
+	fmt.Println("  No immediate match. Unfilled remainder was cancelled by FAK semantics.")
 }

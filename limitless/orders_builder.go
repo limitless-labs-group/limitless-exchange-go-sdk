@@ -50,7 +50,16 @@ func (b *OrderBuilder) BuildOrder(args OrderArgs) (*UnsignedOrder, error) {
 		takerAmount = ta
 
 	case GTCOrderArgs:
-		ma, ta, p, err := b.calculateGTCAmounts(a.Price, a.Size, a.Side)
+		ma, ta, p, err := b.calculateLimitOrderAmounts(a.Price, a.Size, a.Side)
+		if err != nil {
+			return nil, err
+		}
+		makerAmount = ma
+		takerAmount = ta
+		price = &p
+
+	case FAKOrderArgs:
+		ma, ta, p, err := b.calculateLimitOrderAmounts(a.Price, a.Size, a.Side)
 		if err != nil {
 			return nil, err
 		}
@@ -75,6 +84,16 @@ func (b *OrderBuilder) BuildOrder(args OrderArgs) (*UnsignedOrder, error) {
 			nonce = *a.Nonce
 		}
 	case GTCOrderArgs:
+		if a.Taker != "" {
+			taker = a.Taker
+		}
+		if a.Expiration != "" {
+			expiration = a.Expiration
+		}
+		if a.Nonce != nil {
+			nonce = *a.Nonce
+		}
+	case FAKOrderArgs:
 		if a.Taker != "" {
 			taker = a.Taker
 		}
@@ -129,7 +148,9 @@ func (b *OrderBuilder) calculateFOKAmounts(makerAmount float64) (int64, int64, e
 	return scaled, 1, nil
 }
 
-func (b *OrderBuilder) calculateGTCAmounts(price float64, size float64, side Side) (int64, int64, float64, error) {
+// calculateLimitOrderAmounts computes maker/taker amounts for limit-like
+// orders (GTC, FAK) given a tick-aligned price and size.
+func (b *OrderBuilder) calculateLimitOrderAmounts(price float64, size float64, side Side) (int64, int64, float64, error) {
 	scale := mathutil.Scale6
 
 	shares := mathutil.ParseDecToInt(strconv.FormatFloat(size, 'f', -1, 64), scale)
@@ -209,6 +230,8 @@ func tokenIDFromArgs(args OrderArgs) string {
 		return a.TokenID
 	case GTCOrderArgs:
 		return a.TokenID
+	case FAKOrderArgs:
+		return a.TokenID
 	}
 	return ""
 }
@@ -219,8 +242,20 @@ func sideFromArgs(args OrderArgs) Side {
 		return a.Side
 	case GTCOrderArgs:
 		return a.Side
+	case FAKOrderArgs:
+		return a.Side
 	}
 	return SideBuy
+}
+
+// postOnlyFromArgs returns a pointer to the PostOnly flag for GTC args when set,
+// or nil so the field is omitted from the JSON payload.
+func postOnlyFromArgs(args OrderArgs) *bool {
+	if a, ok := args.(GTCOrderArgs); ok && a.PostOnly {
+		v := true
+		return &v
+	}
+	return nil
 }
 
 // isValidAddress does a basic Ethereum address format check.

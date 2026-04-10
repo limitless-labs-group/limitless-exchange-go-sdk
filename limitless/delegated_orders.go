@@ -74,6 +74,7 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 		MarketSlug: params.MarketSlug,
 		OwnerID:    params.OnBehalfOf,
 		OnBehalfOf: &params.OnBehalfOf,
+		PostOnly:   postOnlyFromArgs(params.Args),
 	}
 
 	var resp OrderResponse
