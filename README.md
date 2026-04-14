@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.5** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.6** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.0.5 Release**: Adds `FAK` limit-order support and `postOnly` for `GTC` orders. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.0.6 Release**: Adds server-wallet redeem and withdraw support for delegated-signing child accounts, plus pkg.go.dev metadata improvements. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -29,7 +29,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 
 - **Authentication**: Legacy API-key auth and new scoped API-key auth
 - **Order Management**: Create, cancel, and manage `GTC`, `FAK`, and `FOK` orders on CLOB and NegRisk markets, including `postOnly` for `GTC`
-- **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement
+- **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement, server-wallet redeem/withdraw
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
 - **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
@@ -41,10 +41,15 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.5
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.6
 ```
 
 Requires Go 1.24 or later.
+
+Package documentation:
+
+- Module overview: `https://pkg.go.dev/github.com/limitless-labs-group/limitless-exchange-go-sdk`
+- Public SDK API: `https://pkg.go.dev/github.com/limitless-labs-group/limitless-exchange-go-sdk/limitless`
 
 ## Quick Start
 
@@ -149,6 +154,14 @@ MARKET_SLUG=your-market-slug
 # Required for delegated order examples
 LIMITLESS_PARTNER_PROFILE_ID=12345
 LIMITLESS_TARGET_FEE_RATE_BPS=300
+
+# Optional for server-wallet redeem / withdraw example
+LIMITLESS_SKIP_WITHDRAW=1
+LIMITLESS_WITHDRAW_AMOUNT=
+LIMITLESS_WITHDRAW_DESTINATION=
+LIMITLESS_WITHDRAW_TOKEN=
+LIMITLESS_ON_BEHALF_OF=
+LIMITLESS_SERVER_WALLET_ACCOUNT=
 ```
 
 ### Token Approvals
@@ -302,7 +315,7 @@ ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
 })
 ```
 
-### Scoped API Keys & Delegated Orders
+### Scoped API Keys, Delegated Orders, & Server Wallets
 
 ```go
 sdk := limitless.NewClient(
@@ -331,8 +344,24 @@ resp, _ := sdk.DelegatedOrders.CreateOrder(ctx, limitless.CreateDelegatedOrderPa
         Size:    10.0,
     },
 })
-_ = resp
+
+// Redeem resolved positions for a server-managed child profile
+redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWalletParams{
+    ConditionID: "0x...",
+    OnBehalfOf:  12345,
+})
+
+// Withdraw funds from the same child profile
+withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
+    Amount:      "1000000",
+    OnBehalfOf:  12345,
+    Destination: "0xReceiverAddress",
+})
+
+_, _, _ = resp, redeem, withdraw
 ```
+
+Use `ServerWallets` only for child profiles created with `CreateServerWallet=true`. When deriving the scoped token for withdraw flows, include `limitless.ScopeWithdrawal`.
 
 **Available Channels:**
 
@@ -476,6 +505,7 @@ Runnable examples are available in the [`examples/`](https://github.com/limitles
 | [`api_tokens`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
 | [`delegated_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_order) | Place a delegated partner order | Scoped API key |
 | [`delegated_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_fok_order) | Place a delegated FOK partner order | Scoped API key |
+| [`server_wallet_redeem_withdraw`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/server_wallet_redeem_withdraw) | Reuse or create a server-wallet child profile, redeem resolved positions, and optionally withdraw funds | Scoped API key / Privy |
 | [`e2e_fok_flow`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/e2e_fok_flow) | End-to-end partner delegated FOK flow without cleanup | Scoped API key / Privy |
 | [`websocket_orderbook`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_orderbook) | Stream live orderbook updates | No |
 | [`websocket_positions`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_positions) | Stream position and transaction updates | Yes |
@@ -490,6 +520,11 @@ go run .
 export LIMITLESS_API_KEY=your_key
 export PRIVATE_KEY=your_private_key
 export MARKET_SLUG=your-market-slug
+
+# Partner HMAC examples also need:
+export LIMITLESS_IDENTITY_TOKEN=your_privy_identity_token
+export LIMITLESS_SKIP_WITHDRAW=1
+
 cd examples/clob_gtc_order
 go run .
 ```
@@ -514,6 +549,8 @@ limitless/
 ├── orders_validator.go    # Input validation
 ├── portfolio.go           # PortfolioFetcher (profile, positions, history)
 ├── portfolio_types.go     # UserProfile, CLOBPosition, AMMPosition types
+├── server_wallets.go      # ServerWalletService (redeem and withdraw)
+├── server_wallets_types.go # Server-wallet request and response types
 ├── retry.go               # Retry logic with exponential backoff
 ├── websocket.go           # WebSocketClient with typed event handlers
 ├── websocket_socketio.go  # Socket.IO/Engine.IO v4 protocol implementation
@@ -529,6 +566,7 @@ examples/
 ├── api_tokens/            # Scoped API-key listing and capability lookup
 ├── delegated_order/       # Delegated partner order placement
 ├── delegated_fok_order/   # Delegated FOK partner order placement
+├── server_wallet_redeem_withdraw/ # Server-wallet redeem and optional withdraw
 ├── e2e_fok_flow/          # End-to-end partner delegated FOK flow
 ├── websocket_orderbook/   # Live orderbook streaming
 └── websocket_positions/   # Position and transaction streaming
@@ -550,4 +588,4 @@ See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go
 
 ## License
 
-MIT
+MIT - see [LICENSE](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/LICENSE)

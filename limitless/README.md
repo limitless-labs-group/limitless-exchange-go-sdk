@@ -6,14 +6,14 @@ It provides:
 
 - public market and orderbook reads
 - signed CLOB order placement for `GTC`, `FAK`, and `FOK`
-- delegated order creation for partner/server-wallet flows
+- delegated order creation plus server-wallet redeem/withdraw for partner flows
 - portfolio, market-page, API-token, and partner-account APIs
 - WebSocket clients for real-time streams
 
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.5
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.6
 ```
 
 ## Import
@@ -73,6 +73,34 @@ sdk := limitless.NewClient(
 	}),
 )
 ```
+
+## Partner HMAC Flows
+
+Use `ServerWallets` only for child profiles created with `CreateServerWallet=true`.
+
+```go
+sdk := limitless.NewClient(
+	limitless.WithHMACCredentials(limitless.HMACCredentials{
+		TokenID: os.Getenv("LIMITLESS_API_TOKEN_ID"),
+		Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
+	}),
+)
+
+redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWalletParams{
+	ConditionID: "0x...",
+	OnBehalfOf:  12345,
+})
+
+withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
+	Amount:      "1000000",
+	OnBehalfOf:  12345,
+	Destination: "0xReceiverAddress",
+})
+
+_, _ = redeem, withdraw
+```
+
+For withdraw flows, derive the scoped token with `limitless.ScopeWithdrawal`.
 
 ## Orders
 
@@ -149,5 +177,6 @@ Repository examples:
 - [`examples/clob_fok_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/clob_fok_order/main.go)
 - [`examples/delegated_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/delegated_order/main.go)
 - [`examples/delegated_fok_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/delegated_fok_order/main.go)
+- [`examples/server_wallet_redeem_withdraw/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/server_wallet_redeem_withdraw/main.go)
 
 Full module documentation, release notes, and setup guidance are in the repository root [`README.md`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/README.md).
