@@ -12,6 +12,7 @@ type Client struct {
 	ApiTokens       *ApiTokenService
 	PartnerAccounts *PartnerAccountService
 	DelegatedOrders *DelegatedOrderService
+	ServerWallets   *ServerWalletService
 }
 
 // NewClient constructs a root SDK client with shared domain services.
@@ -34,6 +35,7 @@ func NewClientFromHTTP(httpClient *HttpClient) *Client {
 		ApiTokens:       NewApiTokenService(httpClient, WithApiTokenLogger(logger)),
 		PartnerAccounts: NewPartnerAccountService(httpClient, WithPartnerAccountLogger(logger)),
 		DelegatedOrders: NewDelegatedOrderService(httpClient, WithDelegatedOrderLogger(logger)),
+		ServerWallets:   NewServerWalletService(httpClient, WithServerWalletLogger(logger)),
 	}
 }
 

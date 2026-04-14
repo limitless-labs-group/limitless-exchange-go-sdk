@@ -4,6 +4,17 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+### Added
+
+- New server-wallet partner surface for delegated-signing child accounts:
+  - `Client.ServerWallets`
+  - `ServerWalletService`
+  - `RedeemServerWalletParams` / `RedeemServerWalletResponse`
+  - `WithdrawServerWalletParams` / `WithdrawServerWalletResponse`
+- New `ScopeWithdrawal` constant for api-token derivation flows that need `/portfolio/withdraw`.
+- New focused tests covering server-wallet validation, HMAC-only auth enforcement, and root client composition.
+- New runnable `examples/server_wallet_redeem_withdraw` flow plus README/package-doc coverage for server-wallet redeem and optional withdraw operations.
+
 ## [1.0.5] - 2026-04-09
 
 ### Added
