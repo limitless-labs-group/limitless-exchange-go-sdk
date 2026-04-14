@@ -4,6 +4,7 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-04-14
 ### Added
 
 - New server-wallet partner surface for delegated-signing child accounts:

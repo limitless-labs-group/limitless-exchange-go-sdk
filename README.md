@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.5** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.6** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.0.5 Release**: Adds `FAK` limit-order support and `postOnly` for `GTC` orders. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.0.6 Release**: Adds server-wallet redeem and withdraw support for delegated-signing child accounts, plus pkg.go.dev metadata improvements. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -41,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.5
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.6
 ```
 
 Requires Go 1.24 or later.
