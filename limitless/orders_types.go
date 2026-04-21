@@ -269,10 +269,10 @@ func parseNullableFloat64FromNumberOrString(raw json.RawMessage) (*float64, erro
 
 // OrderMatch contains match information for filled orders.
 type OrderMatch struct {
-	ID          string `json:"id"`
-	CreatedAt   string `json:"createdAt"`
-	MatchedSize string `json:"matchedSize"`
-	OrderID     string `json:"orderId"`
+	ID          string  `json:"id"`
+	CreatedAt   *string `json:"createdAt"`
+	MatchedSize string  `json:"matchedSize"`
+	OrderID     string  `json:"orderId"`
 }
 
 // OrderResponse is returned after successfully creating an order.

@@ -61,18 +61,21 @@ func main() {
 		fmt.Printf("    PnL: %s\n", pos.UnrealizedPnl)
 	}
 
-	// Fetch user history
-	history, err := sdk.Portfolio.GetUserHistory(ctx, 1, 10)
+	// Fetch user history (cursor-based pagination)
+	history, err := sdk.Portfolio.GetUserHistory(ctx, "", 10)
 	if err != nil {
 		log.Fatalf("Failed to fetch history: %v", err)
 	}
 
-	fmt.Printf("\nHistory: %d entries (total: %d)\n", len(history.Data), history.TotalCount)
+	fmt.Printf("\nHistory: %d entries\n", len(history.Data))
 	for _, entry := range history.Data {
-		fmt.Printf("  [%s] %s", entry.Type, entry.CreatedAt)
-		if entry.MarketSlug != nil {
-			fmt.Printf(" - %s", *entry.MarketSlug)
+		slug := ""
+		if entry.Market != nil {
+			slug = " - " + entry.Market.Slug
 		}
-		fmt.Println()
+		fmt.Printf("  [%s] ts=%d%s\n", entry.Strategy, entry.BlockTimestamp, slug)
+	}
+	if history.NextCursor != nil {
+		fmt.Printf("  Next cursor: %s\n", *history.NextCursor)
 	}
 }

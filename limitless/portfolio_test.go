@@ -87,18 +87,27 @@ func TestPortfolioFetcher_GetPositionsAndSlices(t *testing.T) {
 	}
 }
 
-func TestPortfolioFetcher_GetUserHistory_DefaultPagination(t *testing.T) {
+func TestPortfolioFetcher_GetUserHistory_CursorPagination(t *testing.T) {
 	t.Parallel()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/portfolio/history", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("page") != "1" || q.Get("limit") != "10" {
-			t.Fatalf("expected default pagination page=1 limit=10, got query=%s", r.URL.RawQuery)
+		if !q.Has("cursor") {
+			t.Fatal("expected cursor query parameter to be present")
+		}
+		if q.Get("cursor") != "" {
+			t.Fatalf("expected empty cursor on first page, got cursor=%q", q.Get("cursor"))
+		}
+		if r.URL.RawQuery != "cursor=&limit=20" {
+			t.Fatalf("expected first-page raw query cursor=&limit=20, got %s", r.URL.RawQuery)
+		}
+		if q.Get("limit") != "20" {
+			t.Fatalf("expected default limit=20, got limit=%s", q.Get("limit"))
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data":       []any{},
-			"totalCount": 0,
+			"nextCursor": nil,
 		})
 	})
 
@@ -108,7 +117,7 @@ func TestPortfolioFetcher_GetUserHistory_DefaultPagination(t *testing.T) {
 	client := NewHttpClient(WithBaseURL(srv.URL), WithAPIKey("test-key"))
 	fetcher := NewPortfolioFetcher(client)
 
-	_, err := fetcher.GetUserHistory(context.Background(), 0, 0)
+	_, err := fetcher.GetUserHistory(context.Background(), "", 0)
 	if err != nil {
 		t.Fatalf("GetUserHistory returned error: %v", err)
 	}
@@ -126,7 +135,7 @@ func TestPortfolioFetcher_AuthenticatedMethods_RequireAPIKey(t *testing.T) {
 	if _, err := fetcher.GetPositions(context.Background()); err == nil {
 		t.Fatal("expected GetPositions to fail without API key")
 	}
-	if _, err := fetcher.GetUserHistory(context.Background(), 1, 10); err == nil {
+	if _, err := fetcher.GetUserHistory(context.Background(), "", 10); err == nil {
 		t.Fatal("expected GetUserHistory to fail without API key")
 	}
 }

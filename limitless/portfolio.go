@@ -107,30 +107,29 @@ func (pf *PortfolioFetcher) GetAMMPositions(ctx context.Context) ([]AMMPosition,
 	return resp.AMM, nil
 }
 
-// GetUserHistory fetches paginated user history.
-// Defaults to page=1, limit=10 when zero values are passed.
-func (pf *PortfolioFetcher) GetUserHistory(ctx context.Context, page, limit int) (*HistoryResponse, error) {
+// GetUserHistory fetches user history with cursor-based pagination.
+// Pass an empty cursor for the first page; use the returned NextCursor for subsequent pages.
+// Defaults to limit=20 when zero value is passed.
+func (pf *PortfolioFetcher) GetUserHistory(ctx context.Context, cursor string, limit int) (*HistoryResponse, error) {
 	if err := pf.client.requireAuth("GetUserHistory"); err != nil {
 		return nil, err
 	}
 
-	if page <= 0 {
-		page = 1
-	}
 	if limit <= 0 {
-		limit = 10
+		limit = 20
 	}
 
-	pf.logger.Debug("Fetching user history", map[string]any{"page": page, "limit": limit})
+	pf.logger.Debug("Fetching user history", map[string]any{"cursor": cursor, "limit": limit})
 
+	// Always send cursor=, using an empty value on the first page.
 	query := url.Values{}
-	query.Set("page", fmt.Sprintf("%d", page))
+	query.Set("cursor", cursor)
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	path := "/portfolio/history?" + query.Encode()
 
 	var resp HistoryResponse
 	if err := pf.client.Get(ctx, path, &resp); err != nil {
-		pf.logger.Error("Failed to fetch user history", err, map[string]any{"page": page, "limit": limit})
+		pf.logger.Error("Failed to fetch user history", err, map[string]any{"cursor": cursor, "limit": limit})
 		return nil, err
 	}
 
