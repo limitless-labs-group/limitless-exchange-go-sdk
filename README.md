@@ -393,7 +393,7 @@ fmt.Printf("CLOB: %d positions | AMM: %d positions\n",
     len(positions.CLOB), len(positions.AMM))
 
 // Fetch user history
-history, _ := sdk.Portfolio.GetUserHistory(ctx, 1, 10)
+history, _ := sdk.Portfolio.GetUserHistory(ctx, "", 20)
 ```
 
 ### User Orders

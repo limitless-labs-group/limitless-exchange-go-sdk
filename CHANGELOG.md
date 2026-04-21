@@ -4,6 +4,17 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+## [1.0.7]
+### Changed
+
+- Migrated portfolio history endpoint from legacy page/limit pagination to cursor-based pagination.
+  - `GetUserHistory()` now accepts `cursor string` instead of `page int`.
+  - First request should pass empty string for cursor; subsequent requests pass the returned `NextCursor`.
+  - Default limit changed from 10 to 20 to match API default.
+- Updated `HistoryEntry` struct to match current API response shape (`BlockTimestamp`, `Strategy`, `TransactionHash`, `Market`, etc.).
+- Replaced `HistoryResponse.TotalCount` with `NextCursor *string` for cursor-based pagination.
+- Added `HistoryMarket` and `HistoryMarketCollateral` structs.
+
 ## [1.0.6] - 2026-04-14
 ### Added
 

@@ -196,18 +196,41 @@ type PortfolioSummary struct {
 	Breakdown             PortfolioBreakdown `json:"breakdown"`
 }
 
-// HistoryEntry represents a user history entry.
-type HistoryEntry struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	CreatedAt  string                 `json:"createdAt"`
-	MarketSlug *string                `json:"marketSlug,omitempty"`
-	Amount     *string                `json:"amount,omitempty"`
-	Details    map[string]interface{} `json:"details,omitempty"`
+// HistoryMarketCollateral is the collateral token info inside a history market.
+type HistoryMarketCollateral struct {
+	Symbol   string `json:"symbol"`
+	ID       string `json:"id"`
+	Decimals int    `json:"decimals"`
 }
 
-// HistoryResponse is the paginated response for /portfolio/history.
+// HistoryMarket is the market snapshot embedded in a history entry.
+type HistoryMarket struct {
+	Closed         bool                     `json:"closed"`
+	Collateral     *HistoryMarketCollateral  `json:"collateral,omitempty"`
+	Group          interface{}               `json:"group,omitempty"`
+	ConditionID    string                    `json:"conditionId,omitempty"`
+	Funding        string                    `json:"funding,omitempty"`
+	ID             string                    `json:"id"`
+	Slug           string                    `json:"slug"`
+	Title          string                    `json:"title"`
+	ExpirationDate string                    `json:"expirationDate,omitempty"`
+}
+
+// HistoryEntry represents a user history entry (cursor-based).
+type HistoryEntry struct {
+	BlockTimestamp      int64          `json:"blockTimestamp"`
+	CollateralAmount    string         `json:"collateralAmount,omitempty"`
+	Market              *HistoryMarket `json:"market,omitempty"`
+	OutcomeIndex        *int           `json:"outcomeIndex,omitempty"`
+	OutcomeTokenAmount  string         `json:"outcomeTokenAmount,omitempty"`
+	OutcomeTokenAmounts []string       `json:"outcomeTokenAmounts,omitempty"`
+	OutcomeTokenPrice   interface{}    `json:"outcomeTokenPrice,omitempty"`
+	Strategy            string         `json:"strategy,omitempty"`
+	TransactionHash     string         `json:"transactionHash,omitempty"`
+}
+
+// HistoryResponse is the cursor-based response for /portfolio/history.
 type HistoryResponse struct {
 	Data       []HistoryEntry `json:"data"`
-	TotalCount int            `json:"totalCount"`
+	NextCursor *string        `json:"nextCursor"`
 }
