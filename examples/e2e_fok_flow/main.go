@@ -154,7 +154,7 @@ func main() {
 		market.CollateralToken.Symbol,
 		market.CollateralToken.Address,
 	)
-	fmt.Println("   New server wallets also need the backend allowance provisioning to finish before the first delegated trade.")
+	fmt.Println("   Check delegated allowances with PartnerAccounts.CheckAllowances; retry missing or failed targets with RetryAllowances, then poll again.")
 
 	readyDelayMs := optionalPositiveInt("LIMITLESS_DELEGATED_ACCOUNT_READY_DELAY_MS", 10_000)
 	if readyDelayMs > 0 {

@@ -13,7 +13,7 @@ It provides:
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.6
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.8
 ```
 
 ## Import
@@ -76,7 +76,7 @@ sdk := limitless.NewClient(
 
 ## Partner HMAC Flows
 
-Use `ServerWallets` only for child profiles created with `CreateServerWallet=true`.
+Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`.
 
 ```go
 sdk := limitless.NewClient(
@@ -85,6 +85,12 @@ sdk := limitless.NewClient(
 		Secret:  os.Getenv("LIMITLESS_API_TOKEN_SECRET"),
 	}),
 )
+
+allowances, _ := sdk.PartnerAccounts.CheckAllowances(ctx, 12345)
+if allowances != nil && !allowances.Ready {
+	// Retry submits only targets that are still missing after a live chain re-check.
+	allowances, _ = sdk.PartnerAccounts.RetryAllowances(ctx, 12345)
+}
 
 redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWalletParams{
 	ConditionID: "0x...",
@@ -97,10 +103,12 @@ withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletPar
 	Destination: "0xReceiverAddress",
 })
 
-_, _ = redeem, withdraw
+_, _, _ = allowances, redeem, withdraw
 ```
 
-For withdraw flows, derive the scoped token with `limitless.ScopeWithdrawal`.
+Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+
+Allowance checks are always based on live chain reads. A retry response with submitted targets means that retry request submitted a sponsored transaction or user operation; poll `CheckAllowances` again after a short delay to observe confirmed chain state. `RetryAllowances` returns `*limitless.RateLimitError` for `429` responses, with `retryAfterSeconds` in the raw API body, and `*limitless.ConflictError` for `409` responses when another retry is already running.
 
 ## Orders
 
@@ -177,6 +185,7 @@ Repository examples:
 - [`examples/clob_fok_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/clob_fok_order/main.go)
 - [`examples/delegated_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/delegated_order/main.go)
 - [`examples/delegated_fok_order/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/delegated_fok_order/main.go)
+- [`examples/partner_account_allowances/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/partner_account_allowances/main.go)
 - [`examples/server_wallet_redeem_withdraw/main.go`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/examples/server_wallet_redeem_withdraw/main.go)
 
 Full module documentation, release notes, and setup guidance are in the repository root [`README.md`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/README.md).
