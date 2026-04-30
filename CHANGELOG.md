@@ -4,6 +4,24 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-04-30
+### Added
+
+- Partner server-wallet allowance recovery helpers:
+  - `PartnerAccountService.CheckAllowances`
+  - `PartnerAccountService.RetryAllowances`
+  - typed allowance summary, target, status, and error-code response models
+- New runnable `examples/partner_account_allowances` flow for partner HMAC allowance check and retry operations without admin APIs.
+
+### Changed
+
+- Updated partner allowance recovery models and docs for live-chain retry behavior:
+  - target `submitted` status now means the current retry request submitted a sponsored transaction or user operation
+  - target-level `IN_FLIGHT_ELSEWHERE`, `RATE_LIMITED`, and `nextRetryAt` modeling was removed
+  - success response `retryAfterSeconds` / `nextRetryAt` modeling was removed; `429` retry timing remains available from the raw API error body
+  - retry `429` is handled as `RateLimitError`; retry `409` is handled as `ConflictError`
+- README, package documentation, and SDK tracking version now target `v1.0.8`.
+
 ## [1.0.7]
 ### Changed
 

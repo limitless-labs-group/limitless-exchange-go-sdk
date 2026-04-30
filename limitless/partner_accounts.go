@@ -3,9 +3,11 @@ package limitless
 import (
 	"context"
 	"fmt"
+	"strconv"
 )
 
 const partnerAccountDisplayNameMaxLength = 44
+const partnerAccountAllowanceHMACOnlyError = "Partner account allowance recovery requires HMAC-scoped API token auth; legacy API keys are not supported."
 
 // PartnerAccountService manages partner-owned profile creation.
 type PartnerAccountService struct {
@@ -61,4 +63,64 @@ func (s *PartnerAccountService) CreateAccount(ctx context.Context, input CreateP
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// CheckAllowances checks delegated-trading approval readiness from live chain state
+// for a partner-created server wallet profile.
+func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
+	if err := s.requireAllowanceHMACAuth("CheckPartnerAccountAllowances"); err != nil {
+		return nil, err
+	}
+	path, err := partnerAccountAllowancesPath(profileID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Debug("Checking partner account allowances", map[string]any{"profileId": profileID})
+
+	var resp PartnerAccountAllowanceResponse
+	if err := s.client.Get(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RetryAllowances re-checks live chain state and retries delegated-trading approvals
+// that are still missing for a partner-created server wallet profile.
+// Submitted targets in the response mean this retry request submitted a sponsored
+// transaction or user operation; call CheckAllowances again after a short delay to
+// observe confirmed chain state.
+func (s *PartnerAccountService) RetryAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
+	if err := s.requireAllowanceHMACAuth("RetryPartnerAccountAllowances"); err != nil {
+		return nil, err
+	}
+	path, err := partnerAccountAllowancesPath(profileID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Debug("Retrying partner account allowances", map[string]any{"profileId": profileID})
+
+	var resp PartnerAccountAllowanceResponse
+	if err := s.client.Post(ctx, path+"/retry", struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (s *PartnerAccountService) requireAllowanceHMACAuth(operation string) error {
+	if err := s.client.requireAuth(operation); err != nil {
+		return err
+	}
+	if s.client.HMACCredentials() == nil {
+		return fmt.Errorf(partnerAccountAllowanceHMACOnlyError)
+	}
+	return nil
+}
+
+func partnerAccountAllowancesPath(profileID int) (string, error) {
+	if profileID <= 0 {
+		return "", fmt.Errorf("ProfileID must be a positive integer")
+	}
+	return "/profiles/partner-accounts/" + strconv.Itoa(profileID) + "/allowances", nil
 }

@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.7** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.8** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.0.7 Release**: Migrates portfolio history to cursor-based pagination and aligns the SDK with the current history response shape. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.0.8 Release**: Adds partner server-wallet allowance recovery helpers, live-chain retry semantics, and a runnable partner allowance example. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -41,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.7
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.8
 ```
 
 Requires Go 1.24 or later.
@@ -345,6 +345,14 @@ resp, _ := sdk.DelegatedOrders.CreateOrder(ctx, limitless.CreateDelegatedOrderPa
     },
 })
 
+// Check live delegated-trading allowance state for a server-wallet child profile
+allowances, _ := sdk.PartnerAccounts.CheckAllowances(ctx, 12345)
+if allowances != nil && !allowances.Ready {
+    // Retry re-checks live chain state and submits only targets still missing.
+    // A returned "submitted" status means this request submitted a sponsored tx/user operation.
+    allowances, _ = sdk.PartnerAccounts.RetryAllowances(ctx, 12345)
+}
+
 // Redeem resolved positions for a server-managed child profile
 redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWalletParams{
     ConditionID: "0x...",
@@ -358,10 +366,12 @@ withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletPar
     Destination: "0xReceiverAddress",
 })
 
-_, _, _ = resp, redeem, withdraw
+_, _, _, _ = resp, allowances, redeem, withdraw
 ```
 
-Use `ServerWallets` only for child profiles created with `CreateServerWallet=true`. When deriving the scoped token for withdraw flows, include `limitless.ScopeWithdrawal`.
+Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`. Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+
+For allowance recovery, poll `CheckAllowances` first. If `Ready` is false and one or more targets are `missing` or `failed` with `Retryable=true`, call `RetryAllowances`, then poll `CheckAllowances` again after a short delay. A `429` is returned as `*limitless.RateLimitError`; its API body includes `retryAfterSeconds` in `err.Data`. A `409` is returned as `*limitless.ConflictError` and means another retry is already running, so wait briefly and check status again.
 
 **Available Channels:**
 
@@ -505,6 +515,7 @@ Runnable examples are available in the [`examples/`](https://github.com/limitles
 | [`api_tokens`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/api_tokens) | List scoped API keys and fetch capabilities | Scoped API key / Privy |
 | [`delegated_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_order) | Place a delegated partner order | Scoped API key |
 | [`delegated_fok_order`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/delegated_fok_order) | Place a delegated FOK partner order | Scoped API key |
+| [`partner_account_allowances`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/partner_account_allowances) | Check and retry server-wallet allowance recovery with partner HMAC auth only | Scoped API key |
 | [`server_wallet_redeem_withdraw`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/server_wallet_redeem_withdraw) | Reuse or create a server-wallet child profile, redeem resolved positions, and optionally withdraw funds | Scoped API key / Privy |
 | [`e2e_fok_flow`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/e2e_fok_flow) | End-to-end partner delegated FOK flow without cleanup | Scoped API key / Privy |
 | [`websocket_orderbook`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples/websocket_orderbook) | Stream live orderbook updates | No |
@@ -521,7 +532,12 @@ export LIMITLESS_API_KEY=your_key
 export PRIVATE_KEY=your_private_key
 export MARKET_SLUG=your-market-slug
 
-# Partner HMAC examples also need:
+# Partner HMAC examples need:
+export LIMITLESS_API_TOKEN_ID=your_api_token_id
+export LIMITLESS_API_TOKEN_SECRET=your_api_token_secret
+export LIMITLESS_PARTNER_ACCOUNT_PROFILE_ID=12345
+
+# Bootstrap/server-wallet examples that derive or create tokens also need:
 export LIMITLESS_IDENTITY_TOKEN=your_privy_identity_token
 export LIMITLESS_SKIP_WITHDRAW=1
 
@@ -550,6 +566,7 @@ limitless/
 ├── portfolio.go           # PortfolioFetcher (profile, positions, history)
 ├── portfolio_types.go     # UserProfile, CLOBPosition, AMMPosition types
 ├── server_wallets.go      # ServerWalletService (redeem and withdraw)
+├── partner_accounts.go    # PartnerAccountService (account creation and allowance recovery)
 ├── server_wallets_types.go # Server-wallet request and response types
 ├── retry.go               # Retry logic with exponential backoff
 ├── websocket.go           # WebSocketClient with typed event handlers
@@ -566,6 +583,7 @@ examples/
 ├── api_tokens/            # Scoped API-key listing and capability lookup
 ├── delegated_order/       # Delegated partner order placement
 ├── delegated_fok_order/   # Delegated FOK partner order placement
+├── partner_account_allowances/ # Partner allowance check and retry
 ├── server_wallet_redeem_withdraw/ # Server-wallet redeem and optional withdraw
 ├── e2e_fok_flow/          # End-to-end partner delegated FOK flow
 ├── websocket_orderbook/   # Live orderbook streaming
