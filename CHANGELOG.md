@@ -2,9 +2,20 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
-## [Unreleased]
+## [1.0.9]
+
+### Added
+
+- WebSocket subscription/event surface for order events, live sports/esports, market lifecycle, oracle price data, and system messages.
+- Partner withdrawal destination allowlist helpers:
+  - `PartnerAccountService.AddWithdrawalAddress`
+  - `PartnerAccountService.DeleteWithdrawalAddress`
+  - typed `PartnerWithdrawalAddressInput` and `PartnerWithdrawalAddressResponse` models
+- `ServerWalletService.Withdraw` support for destination-only own-wallet withdrawals.
+- Documentation for whitelisted server-wallet withdraw destinations and omitted-destination smart-wallet fallback.
 
 ## [1.0.8] - 2026-04-30
+
 ### Added
 
 - Partner server-wallet allowance recovery helpers:
@@ -23,6 +34,7 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 - README, package documentation, and SDK tracking version now target `v1.0.8`.
 
 ## [1.0.7]
+
 ### Changed
 
 - Migrated portfolio history endpoint from legacy page/limit pagination to cursor-based pagination.
@@ -34,6 +46,7 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 - Added `HistoryMarket` and `HistoryMarketCollateral` structs.
 
 ## [1.0.6] - 2026-04-14
+
 ### Added
 
 - New server-wallet partner surface for delegated-signing child accounts:

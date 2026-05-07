@@ -453,6 +453,18 @@ func (ws *WebSocketClient) OnNewPriceData(handler func(NewPriceData)) {
 	})
 }
 
+// OnOraclePriceData registers a handler for oracle price update events.
+func (ws *WebSocketClient) OnOraclePriceData(handler func(OraclePriceData)) {
+	ws.On("oraclePriceData", func(data json.RawMessage) {
+		var update OraclePriceData
+		if err := json.Unmarshal(data, &update); err != nil {
+			ws.logger.Error("Failed to parse oracle price data", err)
+			return
+		}
+		handler(update)
+	})
+}
+
 // OnTrade registers a handler for trade events.
 func (ws *WebSocketClient) OnTrade(handler func(TradeEvent)) {
 	ws.On("trade", func(data json.RawMessage) {
@@ -475,6 +487,11 @@ func (ws *WebSocketClient) OnOrder(handler func(OrderUpdate)) {
 		}
 		handler(event)
 	})
+}
+
+// OnOrderEvent registers a handler for order lifecycle events.
+func (ws *WebSocketClient) OnOrderEvent(handler func(OrderEvent)) {
+	ws.On("orderEvent", handler)
 }
 
 // OnFill registers a handler for fill events.
@@ -535,6 +552,21 @@ func (ws *WebSocketClient) OnMarketResolved(handler func(MarketResolvedEvent)) {
 		}
 		handler(event)
 	})
+}
+
+// OnLiveSportsUpdate registers a handler for live sports snapshot events.
+func (ws *WebSocketClient) OnLiveSportsUpdate(handler func(LiveSportsUpdate)) {
+	ws.On("live_sports_update", handler)
+}
+
+// OnLiveEsportsUpdate registers a handler for live esports snapshot events.
+func (ws *WebSocketClient) OnLiveEsportsUpdate(handler func(LiveEsportsUpdate)) {
+	ws.On("live_esports_update", handler)
+}
+
+// OnSystem registers a handler for websocket system messages.
+func (ws *WebSocketClient) OnSystem(handler func(SystemEvent)) {
+	ws.On("system", handler)
 }
 
 func (ws *WebSocketClient) setupInternalHandlers() {
@@ -708,7 +740,7 @@ func normalizeFilterValue(value interface{}) interface{} {
 
 func requiresWebSocketAuth(channel SubscriptionChannel) bool {
 	switch channel {
-	case ChannelOrders, ChannelFills, ChannelSubscribePositions, ChannelSubscribeTransactions:
+	case ChannelOrders, ChannelFills, ChannelSubscribePositions, ChannelSubscribeTransactions, ChannelSubscribeOrderEvents:
 		return true
 	default:
 		return false

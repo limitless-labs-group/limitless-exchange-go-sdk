@@ -92,6 +92,12 @@ if allowances != nil && !allowances.Ready {
 	allowances, _ = sdk.PartnerAccounts.RetryAllowances(ctx, 12345)
 }
 
+treasuryAddress := "0xTreasuryAddress"
+withdrawalAddress, _ := sdk.PartnerAccounts.AddWithdrawalAddress(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"), limitless.PartnerWithdrawalAddressInput{
+	Address: treasuryAddress,
+	Label:   "treasury",
+})
+
 redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWalletParams{
 	ConditionID: "0x...",
 	OnBehalfOf:  12345,
@@ -103,10 +109,19 @@ withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletPar
 	Destination: "0xReceiverAddress",
 })
 
-_, _, _ = allowances, redeem, withdraw
+ownWalletWithdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
+	Amount:      "1000000",
+	Destination: treasuryAddress,
+})
+
+_ = sdk.PartnerAccounts.DeleteWithdrawalAddress(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"), treasuryAddress)
+
+_, _, _, _, _ = allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw
 ```
 
 Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+
+Withdrawal destination allowlist management is Privy-only. Use `PartnerAccounts.AddWithdrawalAddress` and `PartnerAccounts.DeleteWithdrawalAddress` with the partner operator's Privy identity token. Scoped API-token withdrawal requests can then target the authenticated partner account address, authenticated partner smart wallet, or an active allowlisted destination. If `Destination` is omitted, the API defaults to the authenticated partner's smart wallet when present; otherwise it defaults to the authenticated partner account. Leave `OnBehalfOf` as zero only when withdrawing the authenticated caller's own server wallet to an explicit `Destination`.
 
 Allowance checks are always based on live chain reads. A retry response with submitted targets means that retry request submitted a sponsored transaction or user operation; poll `CheckAllowances` again after a short delay to observe confirmed chain state. `RetryAllowances` returns `*limitless.RateLimitError` for `429` responses, with `retryAfterSeconds` in the raw API body, and `*limitless.ConflictError` for `409` responses when another retry is already running.
 

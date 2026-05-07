@@ -22,15 +22,20 @@ const (
 type SubscriptionChannel string
 
 const (
-	ChannelOrderbook             SubscriptionChannel = "orderbook"
-	ChannelTrades                SubscriptionChannel = "trades"
-	ChannelOrders                SubscriptionChannel = "orders"
-	ChannelFills                 SubscriptionChannel = "fills"
-	ChannelMarkets               SubscriptionChannel = "markets"
-	ChannelPrices                SubscriptionChannel = "prices"
-	ChannelSubscribeMarketPrices SubscriptionChannel = "subscribe_market_prices"
-	ChannelSubscribePositions    SubscriptionChannel = "subscribe_positions"
-	ChannelSubscribeTransactions SubscriptionChannel = "subscribe_transactions"
+	ChannelOrderbook                  SubscriptionChannel = "orderbook"
+	ChannelTrades                     SubscriptionChannel = "trades"
+	ChannelOrders                     SubscriptionChannel = "orders"
+	ChannelFills                      SubscriptionChannel = "fills"
+	ChannelMarkets                    SubscriptionChannel = "markets"
+	ChannelPrices                     SubscriptionChannel = "prices"
+	ChannelSubscribeMarketPrices      SubscriptionChannel = "subscribe_market_prices"
+	ChannelSubscribePositions         SubscriptionChannel = "subscribe_positions"
+	ChannelSubscribeTransactions      SubscriptionChannel = "subscribe_transactions"
+	ChannelSubscribeOrderEvents       SubscriptionChannel = "subscribe_order_events"
+	ChannelSubscribeLiveSports        SubscriptionChannel = "subscribe_live_sports"
+	ChannelSubscribeLiveEsports       SubscriptionChannel = "subscribe_live_esports"
+	ChannelSubscribeMarketLifecycle   SubscriptionChannel = "subscribe_market_lifecycle"
+	ChannelUnsubscribeMarketLifecycle SubscriptionChannel = "unsubscribe_market_lifecycle"
 )
 
 // SubscriptionOptions contains options for a WebSocket subscription.
@@ -141,6 +146,26 @@ type NewPriceData struct {
 	BlockNumber   int64           `json:"blockNumber"`
 	Timestamp     json.RawMessage `json:"timestamp"` // Can be string, number, or date
 }
+
+// OraclePriceData is the oracle price update event.
+type OraclePriceData struct {
+	MarketAddress *string `json:"marketAddress,omitempty"`
+	MarketSlug    string  `json:"marketSlug"`
+	Timestamp     int64   `json:"timestamp"`
+	Value         float64 `json:"value"`
+}
+
+// OrderEvent is the raw order lifecycle event payload.
+type OrderEvent = json.RawMessage
+
+// LiveSportsUpdate is the raw live sports snapshot payload.
+type LiveSportsUpdate = json.RawMessage
+
+// LiveEsportsUpdate is the raw live esports snapshot payload.
+type LiveEsportsUpdate = json.RawMessage
+
+// SystemEvent is the raw websocket system message payload.
+type SystemEvent = json.RawMessage
 
 // TransactionEvent is a blockchain transaction status event.
 type TransactionEvent struct {

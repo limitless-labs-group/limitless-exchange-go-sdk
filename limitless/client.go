@@ -171,6 +171,7 @@ type requestConfig struct {
 type requestExecutionConfig struct {
 	extraHeaders  map[string]string
 	identityToken string
+	bearerToken   string
 }
 
 // AllowStatus adds an HTTP status code to the list of acceptable response statuses.
@@ -214,7 +215,7 @@ func (c *HttpClient) doRequestRaw(ctx context.Context, method, path string, body
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := c.signAndSetHeaders(req, bodyBytes, ""); err != nil {
+	if err := c.signAndSetHeaders(req, bodyBytes, "", ""); err != nil {
 		return nil, err
 	}
 	if method == http.MethodDelete {
@@ -284,7 +285,7 @@ func (c *HttpClient) doRequestWithConfig(
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := c.signAndSetHeaders(req, bodyBytes, cfg.identityToken); err != nil {
+	if err := c.signAndSetHeaders(req, bodyBytes, cfg.identityToken, cfg.bearerToken); err != nil {
 		return err
 	}
 	for k, v := range cfg.extraHeaders {
@@ -295,7 +296,7 @@ func (c *HttpClient) doRequestWithConfig(
 	}
 
 	logMeta := map[string]any{
-		"headers": c.maskedHeadersForLog(cfg.extraHeaders, cfg.identityToken),
+		"headers": c.maskedHeadersForLog(cfg.extraHeaders, cfg.identityToken, cfg.bearerToken),
 	}
 	if len(bodyBytes) > 0 {
 		logMeta["body"] = string(bodyBytes)
@@ -333,13 +334,18 @@ func (c *HttpClient) doRequestWithConfig(
 	return nil
 }
 
-func (c *HttpClient) signAndSetHeaders(req *http.Request, bodyBytes []byte, overrideIdentityToken string) error {
+func (c *HttpClient) signAndSetHeaders(req *http.Request, bodyBytes []byte, overrideIdentityToken string, overrideBearerToken string) error {
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
 	}
 
 	if overrideIdentityToken != "" {
 		req.Header.Set("identity", "Bearer "+overrideIdentityToken)
+		return nil
+	}
+
+	if overrideBearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+overrideBearerToken)
 		return nil
 	}
 
@@ -385,7 +391,7 @@ func joinURL(baseURL, path string) string {
 	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
-func (c *HttpClient) maskedHeadersForLog(extraHeaders map[string]string, identityToken string) map[string]string {
+func (c *HttpClient) maskedHeadersForLog(extraHeaders map[string]string, identityToken string, bearerToken string) map[string]string {
 	logHeaders := make(map[string]string, len(c.headers)+len(extraHeaders)+4)
 	for k, v := range c.headers {
 		logHeaders[k] = v
@@ -393,6 +399,8 @@ func (c *HttpClient) maskedHeadersForLog(extraHeaders map[string]string, identit
 
 	if identityToken != "" {
 		logHeaders["identity"] = "Bearer ***"
+	} else if bearerToken != "" {
+		logHeaders["Authorization"] = "Bearer ***"
 	} else if c.hmacCreds != nil {
 		logHeaders["lmts-api-key"] = "***"
 		logHeaders["lmts-timestamp"] = "***"

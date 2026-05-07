@@ -85,3 +85,21 @@ type PartnerAccountAllowanceResponse struct {
 	Summary          PartnerAccountAllowanceSummary  `json:"summary"`
 	Targets          []PartnerAccountAllowanceTarget `json:"targets"`
 }
+
+// PartnerWithdrawalAddressInput is the request payload for adding a partner
+// withdrawal destination allowlist entry.
+type PartnerWithdrawalAddressInput struct {
+	Address string `json:"address"`
+	Label   string `json:"label,omitempty"`
+}
+
+// PartnerWithdrawalAddressResponse is returned after adding a partner
+// withdrawal destination allowlist entry.
+type PartnerWithdrawalAddressResponse struct {
+	ID                 string  `json:"id"`
+	ProfileID          int     `json:"profileId"`
+	DestinationAddress string  `json:"destinationAddress"`
+	Label              string  `json:"label"`
+	CreatedAt          string  `json:"createdAt"`
+	DeletedAt          *string `json:"deletedAt"`
+}
