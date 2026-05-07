@@ -177,14 +177,34 @@ func main() {
 
 	amount := requireEnv("LIMITLESS_WITHDRAW_AMOUNT")
 	destination := optionalEnv("LIMITLESS_WITHDRAW_DESTINATION")
+	allowlistDestination := envFlag("LIMITLESS_ALLOWLIST_WITHDRAW_DESTINATION", false)
+	destinationLabel := optionalEnvWithFallback("LIMITLESS_WITHDRAW_DESTINATION_LABEL", "treasury")
 	token := optionalEnv("LIMITLESS_WITHDRAW_TOKEN")
 
 	fmt.Printf(
 		"Withdrawing amount=%s token=%s destination=%s\n",
 		amount,
 		emptyFallback(token, "(default token)"),
-		emptyFallback(destination, "(authenticated account default)"),
+		emptyFallback(destination, "(default: authenticated smart wallet when present, otherwise account)"),
 	)
+
+	if destination != "" && allowlistDestination {
+		fmt.Printf("Allowlisting withdraw destination=%s label=%s\n", destination, destinationLabel)
+		withdrawalAddress, err := bootstrap.PartnerAccounts.AddWithdrawalAddress(ctx, identityToken, limitless.PartnerWithdrawalAddressInput{
+			Address: destination,
+			Label:   destinationLabel,
+		})
+		if err != nil {
+			log.Fatalf("Failed to allowlist withdraw destination: %v", err)
+		}
+		fmt.Printf(
+			"Withdrawal destination allowlisted: id=%s profileId=%d destination=%s label=%s\n",
+			withdrawalAddress.ID,
+			withdrawalAddress.ProfileID,
+			withdrawalAddress.DestinationAddress,
+			withdrawalAddress.Label,
+		)
+	}
 
 	withdraw, err := scoped.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
 		Amount:      amount,

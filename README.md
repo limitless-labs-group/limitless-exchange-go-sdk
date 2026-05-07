@@ -159,6 +159,8 @@ LIMITLESS_TARGET_FEE_RATE_BPS=300
 LIMITLESS_SKIP_WITHDRAW=1
 LIMITLESS_WITHDRAW_AMOUNT=
 LIMITLESS_WITHDRAW_DESTINATION=
+LIMITLESS_ALLOWLIST_WITHDRAW_DESTINATION=0
+LIMITLESS_WITHDRAW_DESTINATION_LABEL=treasury
 LIMITLESS_WITHDRAW_TOKEN=
 LIMITLESS_ON_BEHALF_OF=
 LIMITLESS_SERVER_WALLET_ACCOUNT=
@@ -331,6 +333,13 @@ tokens, _ := sdk.ApiTokens.ListTokens(ctx)
 // Fetch partner capabilities with a Privy identity token
 capabilities, _ := sdk.ApiTokens.GetCapabilities(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"))
 
+// Add or remove partner withdrawal destinations with a Privy access token.
+treasuryAddress := "0xTreasuryAddress"
+withdrawalAddress, _ := sdk.PartnerAccounts.AddWithdrawalAddress(ctx, os.Getenv("LIMITLESS_PRIVY_ACCESS_TOKEN"), limitless.PartnerWithdrawalAddressInput{
+    Address: treasuryAddress,
+    Label:   "treasury",
+})
+
 // Place an order signed by the API on behalf of a partner-managed profile
 resp, _ := sdk.DelegatedOrders.CreateOrder(ctx, limitless.CreateDelegatedOrderParams{
     MarketSlug: "your-market-slug",
@@ -366,10 +375,21 @@ withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletPar
     Destination: "0xReceiverAddress",
 })
 
-_, _, _, _ = resp, allowances, redeem, withdraw
+// Withdraw the authenticated caller's own server wallet to an explicit allowed destination.
+ownWalletWithdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
+    Amount:      "1000000",
+    Destination: treasuryAddress,
+})
+
+// Optional cleanup when the destination should no longer be active.
+_ = sdk.PartnerAccounts.DeleteWithdrawalAddress(ctx, os.Getenv("LIMITLESS_PRIVY_ACCESS_TOKEN"), treasuryAddress)
+
+_, _, _, _, _, _ = resp, allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw
 ```
 
 Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`. Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+
+Withdrawal destination allowlist management is Privy-only. Use `PartnerAccounts.AddWithdrawalAddress` and `PartnerAccounts.DeleteWithdrawalAddress` with the partner operator's Privy access token. Scoped API-token withdrawal requests can then target the authenticated partner account address, authenticated partner smart wallet, or an active allowlisted destination. If `Destination` is omitted, the API defaults to the authenticated partner's smart wallet when present; otherwise it defaults to the authenticated partner account. Leave `OnBehalfOf` as zero only when withdrawing the authenticated caller's own server wallet to an explicit `Destination`.
 
 For allowance recovery, poll `CheckAllowances` first. If `Ready` is false and one or more targets are `missing` or `failed` with `Retryable=true`, call `RetryAllowances`, then poll `CheckAllowances` again after a short delay. A `429` is returned as `*limitless.RateLimitError`; its API body includes `retryAfterSeconds` in `err.Data`. A `409` is returned as `*limitless.ConflictError` and means another retry is already running, so wait briefly and check status again.
 

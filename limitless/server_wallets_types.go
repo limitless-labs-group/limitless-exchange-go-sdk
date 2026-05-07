@@ -7,7 +7,14 @@ type RedeemServerWalletParams struct {
 }
 
 // WithdrawServerWalletParams contains the parameters required for server-wallet withdraw flows.
-// Amount must be provided in the token's smallest unit.
+// Amount must be provided in the token's smallest unit. Destination is optional; when
+// omitted, the API defaults to the authenticated partner's smart wallet when present,
+// otherwise the authenticated partner account. Explicit destinations must be the
+// authenticated partner account, authenticated partner smart wallet, or an active
+// withdrawal address allowlisted on the authenticated partner profile. Set
+// OnBehalfOf for partner child-profile withdrawals. Leave OnBehalfOf as zero
+// only when withdrawing the authenticated caller's own server wallet to an
+// explicit Destination.
 type WithdrawServerWalletParams struct {
 	Amount      string
 	OnBehalfOf  int
@@ -22,7 +29,7 @@ type redeemServerWalletRequest struct {
 
 type withdrawServerWalletRequest struct {
 	Amount      string  `json:"amount"`
-	OnBehalfOf  int     `json:"onBehalfOf"`
+	OnBehalfOf  int     `json:"onBehalfOf,omitempty"`
 	Token       *string `json:"token,omitempty"`
 	Destination *string `json:"destination,omitempty"`
 }

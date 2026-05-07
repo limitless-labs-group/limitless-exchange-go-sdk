@@ -3,13 +3,15 @@ package limitless
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 )
 
 const partnerAccountDisplayNameMaxLength = 44
 const partnerAccountAllowanceHMACOnlyError = "Partner account allowance recovery requires HMAC-scoped API token auth; legacy API keys are not supported."
 
-// PartnerAccountService manages partner-owned profile creation.
+// PartnerAccountService manages partner-owned profiles and partner account operations.
 type PartnerAccountService struct {
 	client *HttpClient
 	logger Logger
@@ -106,6 +108,44 @@ func (s *PartnerAccountService) RetryAllowances(ctx context.Context, profileID i
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// AddWithdrawalAddress adds an active partner withdrawal destination allowlist
+// entry using a Privy identity token. API-token auth is not used for this endpoint.
+func (s *PartnerAccountService) AddWithdrawalAddress(ctx context.Context, identityToken string, input PartnerWithdrawalAddressInput) (*PartnerWithdrawalAddressResponse, error) {
+	if identityToken == "" {
+		return nil, fmt.Errorf("identity token is required for AddWithdrawalAddress")
+	}
+	if input.Address == "" {
+		return nil, fmt.Errorf("address is required for AddWithdrawalAddress")
+	}
+
+	s.logger.Debug("Adding partner withdrawal address", map[string]any{"address": input.Address})
+
+	var resp PartnerWithdrawalAddressResponse
+	if err := s.client.doRequestWithConfig(ctx, http.MethodPost, "/portfolio/withdrawal-addresses", input, requestExecutionConfig{
+		identityToken: identityToken,
+	}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DeleteWithdrawalAddress removes a partner withdrawal destination allowlist
+// entry using a Privy identity token. API-token auth is not used for this endpoint.
+func (s *PartnerAccountService) DeleteWithdrawalAddress(ctx context.Context, identityToken string, address string) error {
+	if identityToken == "" {
+		return fmt.Errorf("identity token is required for DeleteWithdrawalAddress")
+	}
+	if address == "" {
+		return fmt.Errorf("address is required for DeleteWithdrawalAddress")
+	}
+
+	s.logger.Debug("Deleting partner withdrawal address", map[string]any{"address": address})
+
+	return s.client.doRequestWithConfig(ctx, http.MethodDelete, "/portfolio/withdrawal-addresses/"+url.PathEscape(address), nil, requestExecutionConfig{
+		identityToken: identityToken,
+	}, nil)
 }
 
 func (s *PartnerAccountService) requireAllowanceHMACAuth(operation string) error {

@@ -195,6 +195,64 @@ func TestServerWalletService_Withdraw_OmitsOptionalFields(t *testing.T) {
 	}
 }
 
+func TestServerWalletService_Withdraw_DestinationOnlyOwnWallet(t *testing.T) {
+	t.Parallel()
+
+	const secret = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+	const destination = "0x3333333333333333333333333333333333333333"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/portfolio/withdraw", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode withdraw payload: %v", err)
+		}
+		if _, ok := payload["onBehalfOf"]; ok {
+			t.Fatalf("expected onBehalfOf to be omitted, got %+v", payload)
+		}
+		if payload["amount"] != "1000000" || payload["destination"] != destination {
+			t.Fatalf("unexpected destination-only withdraw payload: %+v", payload)
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hash":              "0xwithdraw",
+			"userOperationHash": "0xuserop",
+			"transactionId":     "tx-own-wallet",
+			"walletAddress":     "0x1111111111111111111111111111111111111111",
+			"token":             "0x0000000000000000000000000000000000000000",
+			"destination":       destination,
+			"amount":            "1000000",
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	service := NewServerWalletService(NewHttpClient(
+		WithBaseURL(srv.URL),
+		WithHMACCredentials(HMACCredentials{
+			TokenID: "token-1",
+			Secret:  secret,
+		}),
+	))
+
+	resp, err := service.Withdraw(context.Background(), WithdrawServerWalletParams{
+		Amount:      "1000000",
+		Destination: destination,
+	})
+	if err != nil {
+		t.Fatalf("Withdraw returned error: %v", err)
+	}
+	if resp.TransactionID != "tx-own-wallet" || resp.Destination != destination {
+		t.Fatalf("unexpected withdraw response: %+v", resp)
+	}
+}
+
 func TestServerWalletService_RejectsInvalidRedeemParamsBeforeNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -260,10 +318,18 @@ func TestServerWalletService_RejectsInvalidWithdrawParamsBeforeNetwork(t *testin
 		{
 			name: "invalid on behalf of",
 			params: WithdrawServerWalletParams{
-				Amount:     "1",
-				OnBehalfOf: 0,
+				Amount:      "1",
+				OnBehalfOf:  -1,
+				Destination: "0x3333333333333333333333333333333333333333",
 			},
 			want: "OnBehalfOf must be a positive integer",
+		},
+		{
+			name: "missing on behalf of and destination",
+			params: WithdrawServerWalletParams{
+				Amount: "1",
+			},
+			want: "OnBehalfOf or Destination is required for withdraw",
 		},
 		{
 			name: "invalid token",

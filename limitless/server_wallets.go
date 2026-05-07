@@ -77,14 +77,19 @@ func (s *ServerWalletService) Withdraw(ctx context.Context, params WithdrawServe
 	if err := validateServerWalletAmount(params.Amount); err != nil {
 		return nil, err
 	}
-	if err := validateServerWalletOnBehalfOf(params.OnBehalfOf); err != nil {
-		return nil, err
+	if params.OnBehalfOf != 0 {
+		if err := validateServerWalletOnBehalfOf(params.OnBehalfOf); err != nil {
+			return nil, err
+		}
 	}
 	if params.Token != "" && !isValidAddress(params.Token) {
 		return nil, fmt.Errorf("Token must be a valid EVM address")
 	}
 	if params.Destination != "" && !isValidAddress(params.Destination) {
 		return nil, fmt.Errorf("Destination must be a valid EVM address")
+	}
+	if params.OnBehalfOf == 0 && params.Destination == "" {
+		return nil, fmt.Errorf("OnBehalfOf or Destination is required for withdraw")
 	}
 
 	s.logger.Debug("Withdrawing from server wallet", map[string]any{

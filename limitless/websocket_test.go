@@ -23,6 +23,11 @@ func TestWebSocketClient_Subscribe_AuthValidation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected auth validation error for subscribe_positions without API key, got nil")
 	}
+
+	err = ws.Subscribe(context.Background(), ChannelSubscribeOrderEvents, SubscriptionOptions{})
+	if err == nil {
+		t.Fatal("expected auth validation error for subscribe_order_events without API key, got nil")
+	}
 }
 
 func TestWebSocketClient_Subscribe_AuthValidation_AllowsHMAC(t *testing.T) {
@@ -39,6 +44,10 @@ func TestWebSocketClient_Subscribe_AuthValidation_AllowsHMAC(t *testing.T) {
 
 	if err := ws.Subscribe(context.Background(), ChannelSubscribePositions, SubscriptionOptions{}); err != nil {
 		t.Fatalf("expected HMAC-authenticated subscribe to succeed, got %v", err)
+	}
+
+	if err := ws.Subscribe(context.Background(), ChannelSubscribeOrderEvents, SubscriptionOptions{}); err != nil {
+		t.Fatalf("expected HMAC-authenticated order-event subscribe to succeed, got %v", err)
 	}
 }
 
@@ -306,6 +315,35 @@ func TestWebSocketClient_SubscriptionKeyHelpers(t *testing.T) {
 	}
 	if channel != ChannelSubscribePositions {
 		t.Fatalf("expected subscribe_positions channel, got %s", channel)
+	}
+}
+
+func TestWebSocketClient_ChannelInventoryIncludesServerSubscriptionEvents(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		channel      SubscriptionChannel
+		wireName     string
+		requiresAuth bool
+	}{
+		{ChannelSubscribeOrderEvents, "subscribe_order_events", true},
+		{ChannelSubscribeLiveSports, "subscribe_live_sports", false},
+		{ChannelSubscribeLiveEsports, "subscribe_live_esports", false},
+		{ChannelSubscribeMarketLifecycle, "subscribe_market_lifecycle", false},
+		{ChannelUnsubscribeMarketLifecycle, "unsubscribe_market_lifecycle", false},
+	}
+
+	ws := NewWebSocketClient()
+	for _, tc := range cases {
+		if string(tc.channel) != tc.wireName {
+			t.Fatalf("expected channel %s to use wire name %s", tc.channel, tc.wireName)
+		}
+		if got := ws.channelFromKey(tc.wireName + "|{}"); got != tc.channel {
+			t.Fatalf("expected key to map to %s, got %s", tc.channel, got)
+		}
+		if got := requiresWebSocketAuth(tc.channel); got != tc.requiresAuth {
+			t.Fatalf("expected requires auth=%v for %s, got %v", tc.requiresAuth, tc.channel, got)
+		}
 	}
 }
 
