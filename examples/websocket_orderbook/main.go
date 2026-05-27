@@ -43,9 +43,9 @@ func main() {
 	}
 	defer ws.Disconnect()
 
-	// Subscribe to orderbook updates
+	// CLOB orderbook updates are delivered through the market-price subscription.
 	marketSlug := "will-btc-hit-100k"
-	if err := ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
+	if err := ws.Subscribe(ctx, limitless.ChannelSubscribeMarketPrices, limitless.SubscriptionOptions{
 		MarketSlugs: []string{marketSlug},
 	}); err != nil {
 		log.Fatalf("Failed to subscribe: %v", err)

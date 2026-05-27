@@ -19,6 +19,30 @@ type PartnerAccountResponse struct {
 	Account   string `json:"account"`
 }
 
+// ListPartnerAccountsParams filters and paginates partner-owned profiles.
+type ListPartnerAccountsParams struct {
+	Account string
+	Page    int
+	Limit   int
+}
+
+// PartnerAccountListItem is the minimal partner-owned account metadata returned
+// by the list/recovery endpoint.
+type PartnerAccountListItem struct {
+	ProfileID   int    `json:"profileId"`
+	Account     string `json:"account"`
+	DisplayName string `json:"displayName"`
+}
+
+// ListPartnerAccountsResponse is returned when listing or recovering
+// partner-owned profiles.
+type ListPartnerAccountsResponse struct {
+	Data    []PartnerAccountListItem `json:"data"`
+	Page    int                      `json:"page"`
+	Limit   int                      `json:"limit"`
+	HasMore bool                     `json:"hasMore"`
+}
+
 // PartnerAccountAllowanceTargetType identifies the approval target category.
 type PartnerAccountAllowanceTargetType string
 

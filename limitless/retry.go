@@ -338,3 +338,12 @@ func (rc *RetryableClient) GetWithIdentity(ctx context.Context, path string, ide
 	}, rc.config, rc.logger)
 	return err
 }
+
+// DeleteWithIdentity performs a DELETE request with retry logic using a Privy identity token.
+func (rc *RetryableClient) DeleteWithIdentity(ctx context.Context, path string, identityToken string, result any) error {
+	_, err := WithRetry(ctx, func() (struct{}, error) {
+		err := rc.client.DeleteWithIdentity(ctx, path, identityToken, result)
+		return struct{}{}, err
+	}, rc.config, rc.logger)
+	return err
+}

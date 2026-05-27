@@ -44,6 +44,49 @@ func TestPortfolioFetcher_GetProfile(t *testing.T) {
 	}
 }
 
+func TestPortfolioFetcher_GetCurrentProfile(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/profiles/me", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("expected GET method, got %s", r.Method)
+		}
+		if got := r.URL.Path; got != "/profiles/me" {
+			t.Fatalf("expected /profiles/me path, got %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":      77,
+			"account": "0xa00BCB04073B243E8A55f3B5899AefF596bF17C6",
+			"rank": map[string]any{
+				"id":         2,
+				"name":       "Platinum",
+				"feeRateBps": 200,
+			},
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client := NewHttpClient(WithBaseURL(srv.URL), WithHMACCredentials(HMACCredentials{
+		TokenID: "token-1",
+		Secret:  "c2VjcmV0",
+	}))
+	fetcher := NewPortfolioFetcher(client)
+
+	profile, err := fetcher.GetCurrentProfile(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentProfile returned error: %v", err)
+	}
+	if profile.ID != 77 {
+		t.Fatalf("expected profile id 77, got %d", profile.ID)
+	}
+	if profile.Rank == nil || profile.Rank.FeeRateBps != 200 {
+		t.Fatalf("expected rank feeRateBps=200, got %+v", profile.Rank)
+	}
+}
+
 func TestPortfolioFetcher_GetPositionsAndSlices(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +174,9 @@ func TestPortfolioFetcher_AuthenticatedMethods_RequireAPIKey(t *testing.T) {
 
 	if _, err := fetcher.GetProfile(context.Background(), "0xa00BCB04073B243E8A55f3B5899AefF596bF17C6"); err == nil {
 		t.Fatal("expected GetProfile to fail without API key")
+	}
+	if _, err := fetcher.GetCurrentProfile(context.Background()); err == nil {
+		t.Fatal("expected GetCurrentProfile to fail without API key")
 	}
 	if _, err := fetcher.GetPositions(context.Background()); err == nil {
 		t.Fatal("expected GetPositions to fail without API key")

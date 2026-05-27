@@ -161,6 +161,11 @@ func (c *HttpClient) GetWithIdentity(ctx context.Context, path string, identityT
 	return c.doRequestWithIdentity(ctx, http.MethodGet, path, identityToken, nil, result)
 }
 
+// DeleteWithIdentity performs a DELETE request authenticated with a Privy identity token.
+func (c *HttpClient) DeleteWithIdentity(ctx context.Context, path string, identityToken string, result any) error {
+	return c.doRequestWithIdentity(ctx, http.MethodDelete, path, identityToken, nil, result)
+}
+
 // RequestOption configures a raw HTTP request.
 type RequestOption func(*requestConfig)
 
