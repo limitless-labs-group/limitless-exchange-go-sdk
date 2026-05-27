@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 const defaultDelegatedFeeRateBps = 300
@@ -44,6 +45,10 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 	if params.OnBehalfOf <= 0 {
 		return nil, fmt.Errorf("OnBehalfOf must be a positive integer")
 	}
+	receiveWindow, err := normalizeReceiveWindowOptions(params.ReceiveWindow, time.Now().UnixMilli)
+	if err != nil {
+		return nil, err
+	}
 	if params.FeeRateBps <= 0 {
 		params.FeeRateBps = defaultDelegatedFeeRateBps
 	}
@@ -75,6 +80,8 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 		OwnerID:    params.OnBehalfOf,
 		OnBehalfOf: &params.OnBehalfOf,
 		PostOnly:   postOnlyFromArgs(params.Args),
+		Timestamp:  receiveWindow.Timestamp,
+		RecvWindow: receiveWindow.RecvWindow,
 	}
 
 	var resp OrderResponse

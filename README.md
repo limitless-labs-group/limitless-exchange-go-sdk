@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.10** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.11** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.0.10 Release**: Adds authenticated profile reads via `/profiles/me`, partner sub-account listing/recovery, withdrawal-address allowlists, explicit server-wallet withdrawal destinations, and expanded WebSocket event coverage. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.0.11 Release**: Adds optional receive-window controls for normal and delegated order creation. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -28,7 +28,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Features
 
 - **Authentication**: Legacy API-key auth and new scoped API-key auth
-- **Order Management**: Create, cancel, and manage `GTC`, `FAK`, and `FOK` orders on CLOB and NegRisk markets, including `postOnly` for `GTC`
+- **Order Management**: Create, cancel, and manage `GTC`, `FAK`, and `FOK` orders on CLOB and NegRisk markets, including `postOnly` for `GTC` and optional receive-window freshness checks
 - **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement, server-wallet redeem/withdraw
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
@@ -41,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.10
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.11
 ```
 
 Requires Go 1.24 or later.
@@ -211,6 +211,30 @@ if err != nil {
 }
 fmt.Printf("Order created: %s\n", resp.Order.ID)
 ```
+
+### Optional Receive Window
+
+Order creation can opt into API receive-window freshness checks with `ReceiveWindowOptions`. These values are sent as top-level `POST /orders` fields named `timestamp` and `recvWindow`; they are not included in the signed EIP-712 order payload.
+
+```go
+recvWindow := int64(1500)
+
+resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
+    OrderType:  limitless.OrderTypeGTC,
+    MarketSlug: market.Slug,
+    Args: limitless.GTCOrderArgs{
+        TokenID: market.Tokens.Yes,
+        Side:    limitless.SideBuy,
+        Price:   0.50,
+        Size:    10.0,
+    },
+    ReceiveWindow: limitless.ReceiveWindowOptions{
+        RecvWindow: &recvWindow,
+    },
+})
+```
+
+If omitted, no receive-window fields are sent. `RecvWindow` must be between `1` and `10000` milliseconds. When `RecvWindow` is supplied without `Timestamp`, the SDK stamps the current Unix time in milliseconds. Keep trading hosts NTP-synced; server clock skew tolerance is about one second. Do not retry a `425 Too Early` with the same payload; build a fresh order instead.
 
 ### FAK Orders (Fill-and-Kill Limit Orders)
 

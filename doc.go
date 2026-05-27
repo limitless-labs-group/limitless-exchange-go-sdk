@@ -7,7 +7,7 @@
 //
 // The limitless package provides:
 //   - market, orderbook, portfolio, and market-page reads
-//   - signed order placement for GTC, FAK, and FOK
+//   - signed order placement for GTC, FAK, and FOK with optional receive-window controls
 //   - partner api-token, partner-account, delegated-order, and server-wallet flows
 //   - websocket clients and shared root Client helpers
 //

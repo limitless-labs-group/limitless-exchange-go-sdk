@@ -2,11 +2,12 @@ package limitless
 
 // CreateDelegatedOrderParams contains the parameters required for delegated signing.
 type CreateDelegatedOrderParams struct {
-	MarketSlug string
-	OrderType  OrderType
-	OnBehalfOf int
-	FeeRateBps int
-	Args       OrderArgs
+	MarketSlug    string
+	OrderType     OrderType
+	OnBehalfOf    int
+	FeeRateBps    int
+	Args          OrderArgs
+	ReceiveWindow ReceiveWindowOptions
 }
 
 // OrderSubmission is the request payload used for POST /orders when signature may be omitted.
@@ -35,4 +36,6 @@ type CreateOrderRequest struct {
 	OwnerID    int             `json:"ownerId"`
 	OnBehalfOf *int            `json:"onBehalfOf,omitempty"`
 	PostOnly   *bool           `json:"postOnly,omitempty"`
+	Timestamp  *int64          `json:"timestamp,omitempty"`
+	RecvWindow *int64          `json:"recvWindow,omitempty"`
 }

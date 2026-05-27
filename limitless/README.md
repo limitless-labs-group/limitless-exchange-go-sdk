@@ -13,7 +13,7 @@ It provides:
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.10
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.11
 ```
 
 ## Import
@@ -151,6 +151,33 @@ resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
 _ = resp
 _ = err
 ```
+
+### Optional Receive Window
+
+Pass `ReceiveWindowOptions` to opt into order freshness checks. `Timestamp` and `RecvWindow` serialize as top-level `POST /orders` fields and are not part of the EIP-712 signed order.
+
+```go
+recvWindow := int64(1500)
+
+resp, err := orderClient.CreateOrder(ctx, limitless.CreateOrderParams{
+	OrderType:  limitless.OrderTypeGTC,
+	MarketSlug: market.Slug,
+	Args: limitless.GTCOrderArgs{
+		TokenID: market.Tokens.Yes,
+		Side:    limitless.SideBuy,
+		Price:   0.50,
+		Size:    10.0,
+	},
+	ReceiveWindow: limitless.ReceiveWindowOptions{
+		RecvWindow: &recvWindow,
+	},
+})
+
+_ = resp
+_ = err
+```
+
+If omitted, both fields stay omitted. `RecvWindow` must be `1..10000` milliseconds. When `RecvWindow` is supplied without `Timestamp`, the SDK stamps the current Unix time in milliseconds. Keep trading hosts NTP-synced and build a fresh order instead of retrying the same payload after `425 Too Early`.
 
 ### FAK
 
