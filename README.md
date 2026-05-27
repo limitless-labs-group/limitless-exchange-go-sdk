@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.0.8** | Production-Ready | Type-Safe | Fully Documented
+**v1.0.10** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.0.8 Release**: Adds partner server-wallet allowance recovery helpers, live-chain retry semantics, and a runnable partner allowance example. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.0.10 Release**: Adds authenticated profile reads via `/profiles/me`, partner sub-account listing/recovery, withdrawal-address allowlists, explicit server-wallet withdrawal destinations, and expanded WebSocket event coverage. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -33,7 +33,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
 - **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
-- **WebSocket**: Real-time orderbook, trade, position, and transaction streaming
+- **WebSocket**: Real-time CLOB orderbook, AMM/oracle price, position, transaction, order-event, and market lifecycle streaming
 - **Market Pages & Navigation**: Navigation tree, path-based page resolution, property filters
 - **Portfolio**: Position tracking, user history, and profile access
 - **Logging**: Pluggable logger interface with built-in console logger
@@ -41,7 +41,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.8
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.10
 ```
 
 Requires Go 1.24 or later.
@@ -304,15 +304,15 @@ ws.OnOrderbookUpdate(func(update limitless.OrderbookUpdate) {
         len(update.Orderbook.Asks))
 })
 
-ws.OnTrade(func(trade limitless.TradeEvent) {
-    fmt.Printf("Trade: %s %.2f @ %.3f\n", trade.Side, trade.Size, trade.Price)
+ws.OnOrderEvent(func(event limitless.OrderEvent) {
+    fmt.Printf("Order event: %s\n", string(event))
 })
 
 // Connect and subscribe
 ws.Connect(context.Background())
 defer ws.Disconnect()
 
-ws.Subscribe(ctx, limitless.ChannelOrderbook, limitless.SubscriptionOptions{
+ws.Subscribe(ctx, limitless.ChannelSubscribeMarketPrices, limitless.SubscriptionOptions{
     MarketSlugs: []string{"your-market-slug"},
 })
 ```
@@ -332,6 +332,19 @@ tokens, _ := sdk.ApiTokens.ListTokens(ctx)
 
 // Fetch partner capabilities with a Privy identity token
 capabilities, _ := sdk.ApiTokens.GetCapabilities(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"))
+
+// List partner-owned sub-accounts. Requires HMAC auth with account_creation scope.
+accounts, _ := sdk.PartnerAccounts.ListAccounts(ctx, limitless.ListPartnerAccountsParams{
+    Limit: 25,
+    Page:  1,
+})
+
+// Recover a specific partner-owned account by address.
+account, _ := sdk.PartnerAccounts.ListAccounts(ctx, limitless.ListPartnerAccountsParams{
+    Account: "0xChildAccount",
+    Limit:   25,
+    Page:    1,
+})
 
 // Add or remove partner withdrawal destinations with a Privy access token.
 treasuryAddress := "0xTreasuryAddress"
@@ -384,7 +397,7 @@ ownWalletWithdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServer
 // Optional cleanup when the destination should no longer be active.
 _ = sdk.PartnerAccounts.DeleteWithdrawalAddress(ctx, os.Getenv("LIMITLESS_PRIVY_ACCESS_TOKEN"), treasuryAddress)
 
-_, _, _, _, _, _ = resp, allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw
+_, _, _, _, _, _, _, _ = resp, allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw, accounts, account
 ```
 
 Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`. Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
@@ -397,15 +410,13 @@ For allowance recovery, poll `CheckAllowances` first. If `Ready` is false and on
 
 | Channel | Auth Required | Description |
 |---------|:---:|-------------|
-| `ChannelOrderbook` | No | Orderbook updates |
-| `ChannelTrades` | No | Trade events |
-| `ChannelMarkets` | No | Market updates |
-| `ChannelPrices` | No | Price data |
-| `ChannelSubscribeMarketPrices` | No | Market price subscriptions |
-| `ChannelOrders` | Yes | Order status updates |
-| `ChannelFills` | Yes | Fill events |
+| `ChannelSubscribeMarketPrices` | No | CLOB `orderbookUpdate`, AMM `newPriceData`, oracle `oraclePriceData` |
+| `ChannelSubscribeLiveSports` | No | Live sports snapshots |
+| `ChannelSubscribeLiveEsports` | No | Live esports snapshots |
+| `ChannelSubscribeMarketLifecycle` | No | `marketCreated` and `marketResolved` lifecycle events |
 | `ChannelSubscribePositions` | Yes | Position updates |
 | `ChannelSubscribeTransactions` | Yes | Transaction events |
+| `ChannelSubscribeOrderEvents` | Yes | Order lifecycle and settlement events on `orderEvent` |
 
 ### Portfolio & Profile
 
@@ -417,6 +428,9 @@ sdk := limitless.NewClient(
 // Fetch user profile
 profile, _ := sdk.Portfolio.GetProfile(ctx, "0xYourWalletAddress")
 
+// Fetch the authenticated caller's private profile
+currentProfile, _ := sdk.Portfolio.GetCurrentProfile(ctx)
+
 // Fetch positions
 positions, _ := sdk.Portfolio.GetPositions(ctx)
 fmt.Printf("CLOB: %d positions | AMM: %d positions\n",
@@ -424,6 +438,8 @@ fmt.Printf("CLOB: %d positions | AMM: %d positions\n",
 
 // Fetch user history
 history, _ := sdk.Portfolio.GetUserHistory(ctx, "", 20)
+
+_, _ = profile, currentProfile
 ```
 
 ### User Orders

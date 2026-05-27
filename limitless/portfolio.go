@@ -34,28 +34,53 @@ func NewPortfolioFetcher(client *HttpClient, opts ...PortfolioOption) *Portfolio
 	return pf
 }
 
-// getProfile fetches a user profile by wallet address and decodes into result.
-// This is unexported because it's used internally by OrderClient.
-func (pf *PortfolioFetcher) getProfile(ctx context.Context, address string, result any) error {
+func (pf *PortfolioFetcher) getProfileAtPath(ctx context.Context, operation, path string, fields map[string]any, result any) error {
 	if err := pf.client.requireAuth("GetProfile"); err != nil {
 		return err
 	}
 
-	pf.logger.Debug("Fetching user profile", map[string]any{"address": address})
+	pf.logger.Debug(operation, fields)
 
-	if err := pf.client.Get(ctx, "/profiles/"+url.PathEscape(address), result); err != nil {
-		pf.logger.Error("Failed to fetch user profile", fmt.Errorf("address: %s: %w", address, err))
+	if err := pf.client.Get(ctx, path, result); err != nil {
+		pf.logger.Error("Failed to fetch user profile", err, fields)
 		return err
 	}
 
-	pf.logger.Info("User profile fetched successfully", map[string]any{"address": address})
+	pf.logger.Info("User profile fetched successfully", fields)
 	return nil
+}
+
+// getProfile fetches a user profile by wallet address and decodes into result.
+// This is unexported because it's used internally by OrderClient.
+func (pf *PortfolioFetcher) getProfile(ctx context.Context, address string, result any) error {
+	return pf.getProfileAtPath(
+		ctx,
+		"Fetching user profile",
+		"/profiles/"+url.PathEscape(address),
+		map[string]any{"address": address},
+		result,
+	)
 }
 
 // GetProfile fetches a user profile by wallet address.
 func (pf *PortfolioFetcher) GetProfile(ctx context.Context, address string) (*UserProfile, error) {
 	var profile UserProfile
 	if err := pf.getProfile(ctx, address, &profile); err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// GetCurrentProfile fetches the authenticated caller's private profile.
+func (pf *PortfolioFetcher) GetCurrentProfile(ctx context.Context) (*UserProfile, error) {
+	var profile UserProfile
+	if err := pf.getProfileAtPath(
+		ctx,
+		"Fetching current user profile",
+		"/profiles/me",
+		map[string]any{},
+		&profile,
+	); err != nil {
 		return nil, err
 	}
 	return &profile, nil

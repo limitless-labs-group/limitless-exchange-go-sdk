@@ -51,6 +51,24 @@ func TestWebSocketClient_Subscribe_AuthValidation_AllowsHMAC(t *testing.T) {
 	}
 }
 
+func TestWebSocketClient_Subscribe_RejectsUnknownChannel(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient(WithWebSocketAPIKey("test-key"), WithAutoReconnect(false))
+	ws.mu.Lock()
+	ws.state = StateConnected
+	ws.sio = &socketIOClient{}
+	ws.mu.Unlock()
+
+	err := ws.Subscribe(context.Background(), SubscriptionChannel("unknown"), SubscriptionOptions{})
+	if err == nil {
+		t.Fatal("expected unsupported channel error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported websocket subscription channel") {
+		t.Fatalf("expected unsupported channel error, got %q", err.Error())
+	}
+}
+
 func TestWebSocketClient_OnOnceOffDispatchLocal(t *testing.T) {
 	t.Parallel()
 
@@ -362,13 +380,13 @@ func TestWebSocketClient_Off_RemovesSocketHandlerAfterInternalHandlers(t *testin
 	ws.setupInternalHandlers()
 
 	count := 0
-	id := ws.On("trade", func(data json.RawMessage) {
+	id := ws.On("customEvent", func(data json.RawMessage) {
 		count++
 	})
-	ws.Off("trade", id)
-	ws.sio.dispatchEvent("trade", json.RawMessage(`{}`))
+	ws.Off("customEvent", id)
+	ws.sio.dispatchEvent("customEvent", json.RawMessage(`{}`))
 	if count != 0 {
-		t.Fatalf("expected trade handler to be removed, got count=%d", count)
+		t.Fatalf("expected custom handler to be removed, got count=%d", count)
 	}
 }
 

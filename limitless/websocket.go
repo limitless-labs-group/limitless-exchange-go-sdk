@@ -266,6 +266,10 @@ func (ws *WebSocketClient) Subscribe(ctx context.Context, channel SubscriptionCh
 		return fmt.Errorf("WebSocket not connected. Call Connect() first")
 	}
 
+	if err := validateSubscriptionChannel(channel); err != nil {
+		return err
+	}
+
 	// Check auth requirement
 	if requiresWebSocketAuth(channel) && ws.config.APIKey == "" && ws.config.HMACCreds == nil {
 		return fmt.Errorf(
@@ -301,6 +305,10 @@ func (ws *WebSocketClient) Subscribe(ctx context.Context, channel SubscriptionCh
 func (ws *WebSocketClient) Unsubscribe(ctx context.Context, channel SubscriptionChannel, options SubscriptionOptions) error {
 	if !ws.IsConnected() {
 		return fmt.Errorf("WebSocket not connected")
+	}
+
+	if err := validateSubscriptionChannel(channel); err != nil {
+		return err
 	}
 
 	normalizedOptions := normalizeSubscriptionOptions(options)
@@ -465,45 +473,9 @@ func (ws *WebSocketClient) OnOraclePriceData(handler func(OraclePriceData)) {
 	})
 }
 
-// OnTrade registers a handler for trade events.
-func (ws *WebSocketClient) OnTrade(handler func(TradeEvent)) {
-	ws.On("trade", func(data json.RawMessage) {
-		var event TradeEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			ws.logger.Error("Failed to parse trade event", err)
-			return
-		}
-		handler(event)
-	})
-}
-
-// OnOrder registers a handler for order update events.
-func (ws *WebSocketClient) OnOrder(handler func(OrderUpdate)) {
-	ws.On("order", func(data json.RawMessage) {
-		var event OrderUpdate
-		if err := json.Unmarshal(data, &event); err != nil {
-			ws.logger.Error("Failed to parse order event", err)
-			return
-		}
-		handler(event)
-	})
-}
-
 // OnOrderEvent registers a handler for order lifecycle events.
 func (ws *WebSocketClient) OnOrderEvent(handler func(OrderEvent)) {
 	ws.On("orderEvent", handler)
-}
-
-// OnFill registers a handler for fill events.
-func (ws *WebSocketClient) OnFill(handler func(FillEvent)) {
-	ws.On("fill", func(data json.RawMessage) {
-		var event FillEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			ws.logger.Error("Failed to parse fill event", err)
-			return
-		}
-		handler(event)
-	})
 }
 
 // OnTransaction registers a handler for transaction events.
@@ -512,18 +484,6 @@ func (ws *WebSocketClient) OnTransaction(handler func(TransactionEvent)) {
 		var event TransactionEvent
 		if err := json.Unmarshal(data, &event); err != nil {
 			ws.logger.Error("Failed to parse transaction event", err)
-			return
-		}
-		handler(event)
-	})
-}
-
-// OnMarket registers a handler for market update events.
-func (ws *WebSocketClient) OnMarket(handler func(MarketUpdateEvent)) {
-	ws.On("market", func(data json.RawMessage) {
-		var event MarketUpdateEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			ws.logger.Error("Failed to parse market event", err)
 			return
 		}
 		handler(event)
@@ -740,9 +700,25 @@ func normalizeFilterValue(value interface{}) interface{} {
 
 func requiresWebSocketAuth(channel SubscriptionChannel) bool {
 	switch channel {
-	case ChannelOrders, ChannelFills, ChannelSubscribePositions, ChannelSubscribeTransactions, ChannelSubscribeOrderEvents:
+	case ChannelSubscribePositions, ChannelSubscribeTransactions, ChannelSubscribeOrderEvents:
 		return true
 	default:
 		return false
+	}
+}
+
+func validateSubscriptionChannel(channel SubscriptionChannel) error {
+	switch channel {
+	case ChannelSubscribeMarketPrices,
+		ChannelSubscribePositions,
+		ChannelSubscribeTransactions,
+		ChannelSubscribeOrderEvents,
+		ChannelSubscribeLiveSports,
+		ChannelSubscribeLiveEsports,
+		ChannelSubscribeMarketLifecycle,
+		ChannelUnsubscribeMarketLifecycle:
+		return nil
+	default:
+		return fmt.Errorf("unsupported websocket subscription channel %q; use a supported websocket channel constant", channel)
 	}
 }

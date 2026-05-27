@@ -13,7 +13,7 @@ It provides:
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.8
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.0.10
 ```
 
 ## Import

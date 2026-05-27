@@ -2,6 +2,23 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [1.0.10]
+
+### Added
+
+- `PortfolioFetcher.GetCurrentProfile` for `GET /profiles/me`, fetching the authenticated caller's private profile without passing an address.
+- `PartnerAccountService.ListAccounts` for `GET /profiles/partner-accounts`, including optional address recovery and page/limit query params capped at 25.
+- Public partner account list types:
+  - `ListPartnerAccountsParams`
+  - `PartnerAccountListItem`
+  - `ListPartnerAccountsResponse`
+- `HttpClient.DeleteWithIdentity` and `RetryableClient.DeleteWithIdentity` for identity-token authenticated DELETE requests.
+- Unit coverage for `/profiles/me` profile reads and HMAC-only partner account listing, filtering, pagination capping, and invalid query params.
+
+### Changed
+
+- README, package documentation, and SDK tracking version now target `v1.0.10`.
+
 ## [1.0.9]
 
 ### Added
@@ -13,6 +30,12 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
   - typed `PartnerWithdrawalAddressInput` and `PartnerWithdrawalAddressResponse` models
 - `ServerWalletService.Withdraw` support for destination-only own-wallet withdrawals.
 - Documentation for whitelisted server-wallet withdraw destinations and omitted-destination smart-wallet fallback.
+
+### Changed
+
+- Removed unsupported legacy websocket short channel constants and stale typed handlers/types for unsupported events.
+- Updated WebSocket docs/examples to use `subscribe_market_prices` + `orderbookUpdate` for CLOB orderbooks and `subscribe_order_events` + `orderEvent` for authenticated order lifecycle/settlement updates.
+- README, package documentation, and SDK tracking version now target `v1.0.9`.
 
 ## [1.0.8] - 2026-04-30
 
@@ -204,9 +227,9 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 #### WebSocket (Real-time)
 
 - Socket.IO protocol over WebSocket with Engine.IO ping/pong
-- Public channels: orderbook updates, trades, market updates, price data
-- Authenticated channels: positions, transactions, orders, fills
-- Typed event handlers (`OnOrderbookUpdate`, `OnTrade`, `OnOrder`, `OnFill`, `OnTransaction`, `OnMarket`)
+- Public channels: CLOB orderbook updates, AMM/oracle price data, live sports/esports, market lifecycle
+- Authenticated channels: positions, transactions, order lifecycle
+- Typed event handlers (`OnOrderbookUpdate`, `OnNewPriceData`, `OnOraclePriceData`, `OnOrderEvent`, `OnTransaction`, `OnMarketCreated`, `OnMarketResolved`)
 - Generic event handler (`On`, `Once`, `Off`) with handler ID management
 - Auto-reconnect with exponential backoff and jitter
 - Automatic re-subscription on reconnect

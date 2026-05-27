@@ -22,12 +22,6 @@ const (
 type SubscriptionChannel string
 
 const (
-	ChannelOrderbook                  SubscriptionChannel = "orderbook"
-	ChannelTrades                     SubscriptionChannel = "trades"
-	ChannelOrders                     SubscriptionChannel = "orders"
-	ChannelFills                      SubscriptionChannel = "fills"
-	ChannelMarkets                    SubscriptionChannel = "markets"
-	ChannelPrices                     SubscriptionChannel = "prices"
 	ChannelSubscribeMarketPrices      SubscriptionChannel = "subscribe_market_prices"
 	ChannelSubscribePositions         SubscriptionChannel = "subscribe_positions"
 	ChannelSubscribeTransactions      SubscriptionChannel = "subscribe_transactions"
@@ -89,49 +83,8 @@ type OrderbookUpdate struct {
 	Timestamp  json.RawMessage `json:"timestamp"` // Can be string, number, or date
 }
 
-// TradeEvent is emitted when a trade occurs.
-type TradeEvent struct {
-	MarketSlug string  `json:"marketSlug"`
-	Side       string  `json:"side"` // "BUY" or "SELL"
-	Price      float64 `json:"price"`
-	Size       float64 `json:"size"`
-	Timestamp  float64 `json:"timestamp"`
-	TradeID    string  `json:"tradeId"`
-}
-
-// OrderUpdate is emitted when an order status changes.
-type OrderUpdate struct {
-	OrderID    string   `json:"orderId"`
-	MarketSlug string   `json:"marketSlug"`
-	Side       string   `json:"side"` // "BUY" or "SELL"
-	Price      *float64 `json:"price,omitempty"`
-	Size       float64  `json:"size"`
-	Filled     float64  `json:"filled"`
-	Status     string   `json:"status"` // "OPEN", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
-	Timestamp  float64  `json:"timestamp"`
-}
-
-// FillEvent is emitted when an order is filled.
-type FillEvent struct {
-	OrderID    string  `json:"orderId"`
-	MarketSlug string  `json:"marketSlug"`
-	Side       string  `json:"side"` // "BUY" or "SELL"
-	Price      float64 `json:"price"`
-	Size       float64 `json:"size"`
-	Timestamp  float64 `json:"timestamp"`
-	FillID     string  `json:"fillId"`
-}
-
-// MarketUpdateEvent is emitted when market data changes.
-type MarketUpdateEvent struct {
-	MarketSlug     string   `json:"marketSlug"`
-	LastPrice      *float64 `json:"lastPrice,omitempty"`
-	Volume24h      *float64 `json:"volume24h,omitempty"`
-	PriceChange24h *float64 `json:"priceChange24h,omitempty"`
-	Timestamp      float64  `json:"timestamp"`
-}
-
-// AmmPriceEntry is a single AMM price entry in updatedPrices array.
+// AmmPriceEntry is a single AMM price entry in newPriceData.updatedPrices.
+// CLOB orderbookUpdate events use OrderbookData instead.
 type AmmPriceEntry struct {
 	MarketID      int     `json:"marketId"`
 	MarketAddress string  `json:"marketAddress"`

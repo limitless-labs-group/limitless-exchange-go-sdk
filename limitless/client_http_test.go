@@ -286,6 +286,12 @@ func TestHttpClient_HMACPatchAndIdentityOverride(t *testing.T) {
 	if identityResp.Status != "ok" {
 		t.Fatalf("expected status ok, got %q", identityResp.Status)
 	}
+	if err := client.DeleteWithIdentity(context.Background(), "/identity", "privy-token", &identityResp); err != nil {
+		t.Fatalf("DeleteWithIdentity returned error: %v", err)
+	}
+	if identityResp.Status != "ok" {
+		t.Fatalf("expected status ok, got %q", identityResp.Status)
+	}
 
 	if err := client.PostWithHeaders(context.Background(), "/partner", map[string]string{"mode": "eoa"}, map[string]string{
 		"x-account":         "0xabc",

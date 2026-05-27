@@ -2,14 +2,17 @@ package limitless
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 const partnerAccountDisplayNameMaxLength = 44
 const partnerAccountAllowanceHMACOnlyError = "Partner account allowance recovery requires HMAC-scoped API token auth; legacy API keys are not supported."
+const partnerAccountListHMACOnlyError = "Partner account listing requires HMAC-scoped API token auth; legacy API keys are not supported."
+const partnerAccountsMaxLimit = 25
 
 // PartnerAccountService manages partner-owned profiles and partner account operations.
 type PartnerAccountService struct {
@@ -67,10 +70,34 @@ func (s *PartnerAccountService) CreateAccount(ctx context.Context, input CreateP
 	return &resp, nil
 }
 
+// ListAccounts lists partner-owned accounts, or recovers a specific account by
+// address when params.Account is provided.
+func (s *PartnerAccountService) ListAccounts(ctx context.Context, params ListPartnerAccountsParams) (*ListPartnerAccountsResponse, error) {
+	if err := s.requireHMACAuth("ListPartnerAccounts", partnerAccountListHMACOnlyError); err != nil {
+		return nil, err
+	}
+	path, err := partnerAccountsPath(params)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Debug("Listing partner accounts", map[string]any{
+		"account": params.Account,
+		"limit":   params.Limit,
+		"page":    params.Page,
+	})
+
+	var resp ListPartnerAccountsResponse
+	if err := s.client.Get(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // CheckAllowances checks delegated-trading approval readiness from live chain state
 // for a partner-created server wallet profile.
 func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
-	if err := s.requireAllowanceHMACAuth("CheckPartnerAccountAllowances"); err != nil {
+	if err := s.requireHMACAuth("CheckPartnerAccountAllowances", partnerAccountAllowanceHMACOnlyError); err != nil {
 		return nil, err
 	}
 	path, err := partnerAccountAllowancesPath(profileID)
@@ -93,7 +120,7 @@ func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID i
 // transaction or user operation; call CheckAllowances again after a short delay to
 // observe confirmed chain state.
 func (s *PartnerAccountService) RetryAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
-	if err := s.requireAllowanceHMACAuth("RetryPartnerAccountAllowances"); err != nil {
+	if err := s.requireHMACAuth("RetryPartnerAccountAllowances", partnerAccountAllowanceHMACOnlyError); err != nil {
 		return nil, err
 	}
 	path, err := partnerAccountAllowancesPath(profileID)
@@ -123,9 +150,7 @@ func (s *PartnerAccountService) AddWithdrawalAddress(ctx context.Context, identi
 	s.logger.Debug("Adding partner withdrawal address", map[string]any{"address": input.Address})
 
 	var resp PartnerWithdrawalAddressResponse
-	if err := s.client.doRequestWithConfig(ctx, http.MethodPost, "/portfolio/withdrawal-addresses", input, requestExecutionConfig{
-		identityToken: identityToken,
-	}, &resp); err != nil {
+	if err := s.client.PostWithIdentity(ctx, "/portfolio/withdrawal-addresses", identityToken, input, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -143,19 +168,53 @@ func (s *PartnerAccountService) DeleteWithdrawalAddress(ctx context.Context, ide
 
 	s.logger.Debug("Deleting partner withdrawal address", map[string]any{"address": address})
 
-	return s.client.doRequestWithConfig(ctx, http.MethodDelete, "/portfolio/withdrawal-addresses/"+url.PathEscape(address), nil, requestExecutionConfig{
-		identityToken: identityToken,
-	}, nil)
+	return s.client.DeleteWithIdentity(ctx, "/portfolio/withdrawal-addresses/"+url.PathEscape(address), identityToken, nil)
 }
 
-func (s *PartnerAccountService) requireAllowanceHMACAuth(operation string) error {
+func (s *PartnerAccountService) requireHMACAuth(operation string, errorMessage string) error {
 	if err := s.client.requireAuth(operation); err != nil {
 		return err
 	}
 	if s.client.HMACCredentials() == nil {
-		return fmt.Errorf(partnerAccountAllowanceHMACOnlyError)
+		return errors.New(errorMessage)
 	}
 	return nil
+}
+
+func partnerAccountsPath(params ListPartnerAccountsParams) (string, error) {
+	query := url.Values{}
+
+	if params.Account != "" {
+		account := strings.TrimSpace(params.Account)
+		if account == "" {
+			return "", fmt.Errorf("Account must be a non-empty string")
+		}
+		query.Set("account", account)
+	}
+
+	if params.Limit < 0 {
+		return "", fmt.Errorf("Limit must be zero or a positive integer")
+	}
+	if params.Limit > 0 {
+		limit := params.Limit
+		if limit > partnerAccountsMaxLimit {
+			limit = partnerAccountsMaxLimit
+		}
+		query.Set("limit", strconv.Itoa(limit))
+	}
+
+	if params.Page < 0 {
+		return "", fmt.Errorf("Page must be zero or a positive integer")
+	}
+	if params.Page > 0 {
+		query.Set("page", strconv.Itoa(params.Page))
+	}
+
+	encoded := query.Encode()
+	if encoded == "" {
+		return "/profiles/partner-accounts", nil
+	}
+	return "/profiles/partner-accounts?" + encoded, nil
 }
 
 func partnerAccountAllowancesPath(profileID int) (string, error) {

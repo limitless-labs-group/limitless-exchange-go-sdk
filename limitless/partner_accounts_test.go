@@ -215,3 +215,140 @@ func TestPartnerAccountService_CreateAccount(t *testing.T) {
 		}
 	})
 }
+
+func TestPartnerAccountService_ListAccounts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("lists partner accounts with optional filters", func(t *testing.T) {
+		t.Parallel()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/profiles/partner-accounts", func(w http.ResponseWriter, r *http.Request) {
+			if got := r.URL.RawQuery; got != "account=0x1676716Ef7F19B5C5d690631CB57cf0bFD900A3d&limit=25&page=2" {
+				t.Fatalf("unexpected query: %q", got)
+			}
+
+			_ = json.NewEncoder(w).Encode(ListPartnerAccountsResponse{
+				Data: []PartnerAccountListItem{
+					{
+						ProfileID:   42,
+						Account:     "0x1676716Ef7F19B5C5d690631CB57cf0bFD900A3d",
+						DisplayName: "Partner User",
+					},
+				},
+				Page:    2,
+				Limit:   25,
+				HasMore: false,
+			})
+		})
+
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		service := NewPartnerAccountService(NewHttpClient(
+			WithBaseURL(srv.URL),
+			WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "c2VjcmV0"}),
+		))
+		resp, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{
+			Account: " 0x1676716Ef7F19B5C5d690631CB57cf0bFD900A3d ",
+			Limit:   25,
+			Page:    2,
+		})
+		if err != nil {
+			t.Fatalf("ListAccounts returned error: %v", err)
+		}
+		if resp.Page != 2 || resp.Limit != 25 || len(resp.Data) != 1 {
+			t.Fatalf("unexpected response: %#v", resp)
+		}
+		if resp.Data[0].ProfileID != 42 {
+			t.Fatalf("expected profile 42, got %d", resp.Data[0].ProfileID)
+		}
+	})
+
+	t.Run("omits query params by default", func(t *testing.T) {
+		t.Parallel()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/profiles/partner-accounts", func(w http.ResponseWriter, r *http.Request) {
+			if got := r.URL.RawQuery; got != "" {
+				t.Fatalf("expected empty query, got %q", got)
+			}
+
+			_ = json.NewEncoder(w).Encode(ListPartnerAccountsResponse{
+				Data:    []PartnerAccountListItem{},
+				Page:    1,
+				Limit:   25,
+				HasMore: false,
+			})
+		})
+
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		service := NewPartnerAccountService(NewHttpClient(
+			WithBaseURL(srv.URL),
+			WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "c2VjcmV0"}),
+		))
+		if _, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{}); err != nil {
+			t.Fatalf("ListAccounts returned error: %v", err)
+		}
+	})
+
+	t.Run("caps limit to API maximum", func(t *testing.T) {
+		t.Parallel()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/profiles/partner-accounts", func(w http.ResponseWriter, r *http.Request) {
+			if got := r.URL.RawQuery; got != "limit=25&page=1" {
+				t.Fatalf("unexpected query: %q", got)
+			}
+
+			_ = json.NewEncoder(w).Encode(ListPartnerAccountsResponse{
+				Data:    []PartnerAccountListItem{},
+				Page:    1,
+				Limit:   25,
+				HasMore: false,
+			})
+		})
+
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		service := NewPartnerAccountService(NewHttpClient(
+			WithBaseURL(srv.URL),
+			WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "c2VjcmV0"}),
+		))
+		if _, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{Limit: 100, Page: 1}); err != nil {
+			t.Fatalf("ListAccounts returned error: %v", err)
+		}
+	})
+
+	t.Run("requires HMAC auth", func(t *testing.T) {
+		t.Parallel()
+
+		service := NewPartnerAccountService(NewHttpClient(WithBaseURL("https://example.com"), WithAPIKey("api-key")))
+		_, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{})
+		if err == nil || err.Error() != partnerAccountListHMACOnlyError {
+			t.Fatalf("expected error %q, got %v", partnerAccountListHMACOnlyError, err)
+		}
+	})
+
+	t.Run("rejects invalid params", func(t *testing.T) {
+		t.Parallel()
+
+		service := NewPartnerAccountService(NewHttpClient(
+			WithBaseURL("https://example.com"),
+			WithHMACCredentials(HMACCredentials{TokenID: "token-1", Secret: "c2VjcmV0"}),
+		))
+
+		if _, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{Account: " "}); err == nil {
+			t.Fatal("expected blank account to be rejected")
+		}
+		if _, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{Limit: -1}); err == nil {
+			t.Fatal("expected negative limit to be rejected")
+		}
+		if _, err := service.ListAccounts(context.Background(), ListPartnerAccountsParams{Page: -1}); err == nil {
+			t.Fatal("expected negative page to be rejected")
+		}
+	})
+}
