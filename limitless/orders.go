@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // OrderClient manages order creation, signing, and submission.
@@ -146,6 +147,11 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 		return nil, err
 	}
 
+	receiveWindow, err := normalizeReceiveWindowOptions(params.ReceiveWindow, time.Now().UnixMilli)
+	if err != nil {
+		return nil, err
+	}
+
 	userData, err := oc.ensureUserData(ctx)
 	if err != nil {
 		return nil, err
@@ -195,6 +201,8 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 		MarketSlug: params.MarketSlug,
 		OwnerID:    userData.UserID,
 		PostOnly:   postOnlyFromArgs(params.Args),
+		Timestamp:  receiveWindow.Timestamp,
+		RecvWindow: receiveWindow.RecvWindow,
 	}
 
 	// Submit to API

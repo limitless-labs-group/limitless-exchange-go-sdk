@@ -117,6 +117,18 @@ type SignedOrder struct {
 	Signature     string        `json:"signature"`
 }
 
+// ReceiveWindowOptions contains optional freshness controls for POST /orders.
+//
+// Timestamp and RecvWindow are serialized as top-level request fields only.
+// They are not part of the EIP-712 signed order payload.
+type ReceiveWindowOptions struct {
+	// Timestamp is the client-stamped Unix time in milliseconds.
+	Timestamp *int64
+
+	// RecvWindow is the maximum allowed request staleness in milliseconds.
+	RecvWindow *int64
+}
+
 // NewOrderPayload is the payload submitted to the API for order creation.
 type NewOrderPayload struct {
 	Order      SignedOrder `json:"order"`
@@ -124,6 +136,8 @@ type NewOrderPayload struct {
 	MarketSlug string      `json:"marketSlug"`
 	OwnerID    int         `json:"ownerId"`
 	PostOnly   *bool       `json:"postOnly,omitempty"`
+	Timestamp  *int64      `json:"timestamp,omitempty"`
+	RecvWindow *int64      `json:"recvWindow,omitempty"`
 }
 
 // CreatedOrder contains order data returned from the API.
@@ -289,9 +303,10 @@ type OrderSigningConfig struct {
 
 // CreateOrderParams contains parameters for creating an order.
 type CreateOrderParams struct {
-	OrderType  OrderType
-	MarketSlug string
-	Args       OrderArgs
+	OrderType     OrderType
+	MarketSlug    string
+	Args          OrderArgs
+	ReceiveWindow ReceiveWindowOptions
 }
 
 // UserData contains user-specific information for order operations.

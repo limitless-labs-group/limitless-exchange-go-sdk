@@ -2,6 +2,20 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [1.0.11]
+
+### Added
+
+- Optional receive-window controls for normal and delegated order creation:
+  - `ReceiveWindowOptions.Timestamp`
+  - `ReceiveWindowOptions.RecvWindow`, serialized as top-level `recvWindow`
+- Unit coverage for omitted defaults, top-level-only payloads, automatic timestamp stamping, and invalid receive-window values before network calls.
+
+### Changed
+
+- `CreateOrderParams` and `CreateDelegatedOrderParams` now accept optional `ReceiveWindow` controls while preserving unchanged payloads when omitted.
+- README, package documentation, and SDK tracking version now target `v1.0.11`.
+
 ## [1.0.10]
 
 ### Added
