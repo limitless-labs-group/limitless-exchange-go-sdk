@@ -79,6 +79,7 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 		MarketSlug: params.MarketSlug,
 		OwnerID:    params.OnBehalfOf,
 		OnBehalfOf: &params.OnBehalfOf,
+		StpPolicy:  params.StpPolicy,
 		PostOnly:   postOnlyFromArgs(params.Args),
 		Timestamp:  receiveWindow.Timestamp,
 		RecvWindow: receiveWindow.RecvWindow,

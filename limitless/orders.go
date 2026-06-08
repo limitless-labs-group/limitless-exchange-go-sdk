@@ -200,6 +200,7 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 		OrderType:  params.OrderType,
 		MarketSlug: params.MarketSlug,
 		OwnerID:    userData.UserID,
+		StpPolicy:  params.StpPolicy,
 		PostOnly:   postOnlyFromArgs(params.Args),
 		Timestamp:  receiveWindow.Timestamp,
 		RecvWindow: receiveWindow.RecvWindow,

@@ -23,6 +23,26 @@ const (
 	OrderTypeGTC OrderType = "GTC"
 )
 
+// StpPolicy controls self-trade prevention (STP) when a taker order would
+// match against the same profile's resting maker order.
+//
+// Sent top-level on the create-order request body, never inside the signed
+// EIP-712 order. Omit it to let the matching engine apply its default
+// (cancel_maker).
+type StpPolicy string
+
+const (
+	// StpPolicyCancelBoth cancels both the resting maker order and the
+	// incoming taker order on a self-match.
+	StpPolicyCancelBoth StpPolicy = "cancel_both"
+	// StpPolicyCancelMaker cancels the resting maker order and lets the
+	// taker continue. This is the engine default when StpPolicy is omitted.
+	StpPolicyCancelMaker StpPolicy = "cancel_maker"
+	// StpPolicyCancelTaker cancels the incoming taker order and leaves the
+	// resting maker order on the book.
+	StpPolicyCancelTaker StpPolicy = "cancel_taker"
+)
+
 // SignatureType represents the signature type for order signing.
 type SignatureType int
 
@@ -130,11 +150,16 @@ type ReceiveWindowOptions struct {
 }
 
 // NewOrderPayload is the payload submitted to the API for order creation.
+//
+// StpPolicy is a top-level request field, a sibling of PostOnly/RecvWindow.
+// It is deliberately outside the signed Order struct so it never enters the
+// EIP-712 signature.
 type NewOrderPayload struct {
 	Order      SignedOrder `json:"order"`
 	OrderType  OrderType   `json:"orderType"`
 	MarketSlug string      `json:"marketSlug"`
 	OwnerID    int         `json:"ownerId"`
+	StpPolicy  StpPolicy   `json:"stpPolicy,omitempty"`
 	PostOnly   *bool       `json:"postOnly,omitempty"`
 	Timestamp  *int64      `json:"timestamp,omitempty"`
 	RecvWindow *int64      `json:"recvWindow,omitempty"`
@@ -289,10 +314,54 @@ type OrderMatch struct {
 	OrderID     string  `json:"orderId"`
 }
 
+// OrderExecutionTotalsRaw holds the raw decimal totals for an order execution.
+//
+// Every field is a decimal STRING as the API sends it. They are not coerced to
+// numbers to preserve full precision.
+type OrderExecutionTotalsRaw struct {
+	ContractsGross string `json:"contractsGross"`
+	ContractsFee   string `json:"contractsFee"`
+	ContractsNet   string `json:"contractsNet"`
+	UsdGross       string `json:"usdGross"`
+	UsdFee         string `json:"usdFee"`
+	UsdNet         string `json:"usdNet"`
+}
+
+// OrderExecution describes how a submitted order was matched and settled.
+//
+// It is always present on a successful create-order response. The struct is
+// non-pointer on OrderResponse so a response body without execution still
+// unmarshals cleanly to the zero value.
+//
+// SettlementStatus is a plain string (DELAYED, UNMATCHED, CANCELED, MATCHED,
+// MINED, CONFIRMED, RETRYING, FAILED) and is intentionally not modeled as an
+// enum.
+//
+// FeeRateBps and EffectiveFeeBps are NUMBERS; TotalsRaw and StpMakerCancels are
+// STRINGS. Do not coerce between them.
+//
+// Reason carries the STP taker signal over HTTP only (for example
+// STP_TAKER_REJECTED). StpMakerCancels lists the canceled maker order UUIDs and
+// is set only when non-empty.
+type OrderExecution struct {
+	Matched          bool                    `json:"matched"`
+	SettlementStatus string                  `json:"settlementStatus"`
+	TradeEventID     string                  `json:"tradeEventId,omitempty"`
+	TxHash           *string                 `json:"txHash,omitempty"`
+	ClientOrderID    string                  `json:"clientOrderId,omitempty"`
+	EligibleAt       string                  `json:"eligibleAt,omitempty"`
+	Reason           string                  `json:"reason,omitempty"`
+	StpMakerCancels  []string                `json:"stpMakerCancels,omitempty"`
+	FeeRateBps       int                     `json:"feeRateBps"`
+	EffectiveFeeBps  int                     `json:"effectiveFeeBps"`
+	TotalsRaw        OrderExecutionTotalsRaw `json:"totalsRaw"`
+}
+
 // OrderResponse is returned after successfully creating an order.
 type OrderResponse struct {
-	Order        CreatedOrder `json:"order"`
-	MakerMatches []OrderMatch `json:"makerMatches,omitempty"`
+	Order        CreatedOrder   `json:"order"`
+	MakerMatches []OrderMatch   `json:"makerMatches,omitempty"`
+	Execution    OrderExecution `json:"execution"`
 }
 
 // OrderSigningConfig contains EIP-712 signing configuration.
@@ -307,6 +376,9 @@ type CreateOrderParams struct {
 	MarketSlug    string
 	Args          OrderArgs
 	ReceiveWindow ReceiveWindowOptions
+	// StpPolicy is an optional self-trade-prevention policy. When empty the
+	// matching engine applies its default (cancel_maker).
+	StpPolicy StpPolicy
 }
 
 // UserData contains user-specific information for order operations.
