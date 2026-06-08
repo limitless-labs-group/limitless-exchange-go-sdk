@@ -53,6 +53,18 @@ func main() {
 		}
 	})
 
+	// Pre-settlement per-fill MATCHED frames (one per profile per fill).
+	ws.OnMatchedOrderEvent(func(ev limitless.MatchedOrderEvent) {
+		fmt.Printf("\nMatched: order=%s trade=%s price=%s token=%s\n",
+			ev.OrderID, ev.TradeEventID, ev.Price, ev.Token)
+	})
+
+	// FAK/FOK terminal EXECUTION frames.
+	ws.OnExecutionOrderEvent(func(ev limitless.ExecutionOrderEvent) {
+		fmt.Printf("\nExecution: order=%s status=%s price=%g remaining=%g\n",
+			ev.OrderID, ev.Status, ev.Price.Float64(), ev.RemainingSize.Float64())
+	})
+
 	ctx := context.Background()
 
 	// Connect
