@@ -8,8 +8,8 @@ type CreateDelegatedOrderParams struct {
 	FeeRateBps    int
 	Args          OrderArgs
 	ReceiveWindow ReceiveWindowOptions
-	// StpPolicy is an optional self-trade-prevention policy. When empty the
-	// matching engine applies its default (cancel_maker).
+	// Optional self-trade-prevention policy. Omit to use the server default
+	// (cancel_maker).
 	StpPolicy StpPolicy
 }
 
@@ -32,8 +32,6 @@ type OrderSubmission struct {
 }
 
 // CreateOrderRequest is the request envelope for POST /orders in delegated flows.
-//
-// StpPolicy is a top-level request field, never part of the signed Order.
 type CreateOrderRequest struct {
 	Order      OrderSubmission `json:"order"`
 	OrderType  OrderType       `json:"orderType"`

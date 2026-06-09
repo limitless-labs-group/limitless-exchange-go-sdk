@@ -23,23 +23,18 @@ const (
 	OrderTypeGTC OrderType = "GTC"
 )
 
-// StpPolicy controls self-trade prevention (STP) when a taker order would
-// match against the same profile's resting maker order.
+// StpPolicy is the self-trade-prevention policy: what happens when an order
+// would match against the same account's own resting orders.
 //
-// Sent top-level on the create-order request body, never inside the signed
-// EIP-712 order. Omit it to let the matching engine apply its default
-// (cancel_maker).
+//   - cancel_maker (default): cancels the resting order and lets the incoming
+//     order continue.
+//   - cancel_taker: rejects the incoming order and keeps the resting one.
+//   - cancel_both: cancels both.
 type StpPolicy string
 
 const (
-	// StpPolicyCancelBoth cancels both the resting maker order and the
-	// incoming taker order on a self-match.
-	StpPolicyCancelBoth StpPolicy = "cancel_both"
-	// StpPolicyCancelMaker cancels the resting maker order and lets the
-	// taker continue. This is the engine default when StpPolicy is omitted.
+	StpPolicyCancelBoth  StpPolicy = "cancel_both"
 	StpPolicyCancelMaker StpPolicy = "cancel_maker"
-	// StpPolicyCancelTaker cancels the incoming taker order and leaves the
-	// resting maker order on the book.
 	StpPolicyCancelTaker StpPolicy = "cancel_taker"
 )
 
@@ -150,10 +145,6 @@ type ReceiveWindowOptions struct {
 }
 
 // NewOrderPayload is the payload submitted to the API for order creation.
-//
-// StpPolicy is a top-level request field, a sibling of PostOnly/RecvWindow.
-// It is deliberately outside the signed Order struct so it never enters the
-// EIP-712 signature.
 type NewOrderPayload struct {
 	Order      SignedOrder `json:"order"`
 	OrderType  OrderType   `json:"orderType"`
@@ -376,8 +367,8 @@ type CreateOrderParams struct {
 	MarketSlug    string
 	Args          OrderArgs
 	ReceiveWindow ReceiveWindowOptions
-	// StpPolicy is an optional self-trade-prevention policy. When empty the
-	// matching engine applies its default (cancel_maker).
+	// Optional self-trade-prevention policy. Omit to use the server default
+	// (cancel_maker).
 	StpPolicy StpPolicy
 }
 
