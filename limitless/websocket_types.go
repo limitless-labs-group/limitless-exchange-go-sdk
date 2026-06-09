@@ -109,6 +109,14 @@ type OraclePriceData struct {
 }
 
 // OrderEvent is the raw order lifecycle event payload.
+//
+// A self-trade-prevention maker cancel arrives as a CANCELLATION frame that may
+// carry an optional "reason" field equal to STP_MAKER_CANCELLED. The frame is
+// left as raw JSON so the field is already readable without a typed struct.
+//
+// An STP-rejected taker is HTTP-only: it surfaces in the create-order response
+// (OrderExecution.Reason, for example STP_TAKER_REJECTED). Over WebSocket it
+// arrives as a terminal EXECUTION frame mapped to KILLED with no reason.
 type OrderEvent = json.RawMessage
 
 // LiveSportsUpdate is the raw live sports snapshot payload.

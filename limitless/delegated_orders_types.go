@@ -8,6 +8,9 @@ type CreateDelegatedOrderParams struct {
 	FeeRateBps    int
 	Args          OrderArgs
 	ReceiveWindow ReceiveWindowOptions
+	// Optional self-trade-prevention policy. Omit to use the server default
+	// (cancel_maker).
+	StpPolicy StpPolicy
 }
 
 // OrderSubmission is the request payload used for POST /orders when signature may be omitted.
@@ -35,6 +38,7 @@ type CreateOrderRequest struct {
 	MarketSlug string          `json:"marketSlug"`
 	OwnerID    int             `json:"ownerId"`
 	OnBehalfOf *int            `json:"onBehalfOf,omitempty"`
+	StpPolicy  StpPolicy       `json:"stpPolicy,omitempty"`
 	PostOnly   *bool           `json:"postOnly,omitempty"`
 	Timestamp  *int64          `json:"timestamp,omitempty"`
 	RecvWindow *int64          `json:"recvWindow,omitempty"`

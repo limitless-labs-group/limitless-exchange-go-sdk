@@ -200,6 +200,8 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 		OrderType:  params.OrderType,
 		MarketSlug: params.MarketSlug,
 		OwnerID:    userData.UserID,
+		// stpPolicy is sent top-level; do NOT add it to the signed order (would change the signature).
+		StpPolicy:  params.StpPolicy,
 		PostOnly:   postOnlyFromArgs(params.Args),
 		Timestamp:  receiveWindow.Timestamp,
 		RecvWindow: receiveWindow.RecvWindow,

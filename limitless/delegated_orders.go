@@ -79,6 +79,8 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 		MarketSlug: params.MarketSlug,
 		OwnerID:    params.OnBehalfOf,
 		OnBehalfOf: &params.OnBehalfOf,
+		// stpPolicy is sent top-level; do NOT add it to the signed order (would change the signature).
+		StpPolicy:  params.StpPolicy,
 		PostOnly:   postOnlyFromArgs(params.Args),
 		Timestamp:  receiveWindow.Timestamp,
 		RecvWindow: receiveWindow.RecvWindow,

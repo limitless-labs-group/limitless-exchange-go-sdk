@@ -23,6 +23,21 @@ const (
 	OrderTypeGTC OrderType = "GTC"
 )
 
+// StpPolicy is the self-trade-prevention policy: what happens when an order
+// would match against the same account's own resting orders.
+//
+//   - cancel_maker (default): cancels the resting order and lets the incoming
+//     order continue.
+//   - cancel_taker: rejects the incoming order and keeps the resting one.
+//   - cancel_both: cancels both.
+type StpPolicy string
+
+const (
+	StpPolicyCancelBoth  StpPolicy = "cancel_both"
+	StpPolicyCancelMaker StpPolicy = "cancel_maker"
+	StpPolicyCancelTaker StpPolicy = "cancel_taker"
+)
+
 // SignatureType represents the signature type for order signing.
 type SignatureType int
 
@@ -135,6 +150,7 @@ type NewOrderPayload struct {
 	OrderType  OrderType   `json:"orderType"`
 	MarketSlug string      `json:"marketSlug"`
 	OwnerID    int         `json:"ownerId"`
+	StpPolicy  StpPolicy   `json:"stpPolicy,omitempty"`
 	PostOnly   *bool       `json:"postOnly,omitempty"`
 	Timestamp  *int64      `json:"timestamp,omitempty"`
 	RecvWindow *int64      `json:"recvWindow,omitempty"`
@@ -289,10 +305,54 @@ type OrderMatch struct {
 	OrderID     string  `json:"orderId"`
 }
 
+// OrderExecutionTotalsRaw holds the raw decimal totals for an order execution.
+//
+// Every field is a decimal STRING as the API sends it. They are not coerced to
+// numbers to preserve full precision.
+type OrderExecutionTotalsRaw struct {
+	ContractsGross string `json:"contractsGross"`
+	ContractsFee   string `json:"contractsFee"`
+	ContractsNet   string `json:"contractsNet"`
+	UsdGross       string `json:"usdGross"`
+	UsdFee         string `json:"usdFee"`
+	UsdNet         string `json:"usdNet"`
+}
+
+// OrderExecution describes how a submitted order was matched and settled.
+//
+// It is always present on a successful create-order response. The struct is
+// non-pointer on OrderResponse so a response body without execution still
+// unmarshals cleanly to the zero value.
+//
+// SettlementStatus is a plain string (DELAYED, UNMATCHED, CANCELED, MATCHED,
+// MINED, CONFIRMED, RETRYING, FAILED) and is intentionally not modeled as an
+// enum.
+//
+// FeeRateBps and EffectiveFeeBps are NUMBERS; TotalsRaw and StpMakerCancels are
+// STRINGS. Do not coerce between them.
+//
+// Reason carries the STP taker signal over HTTP only (for example
+// STP_TAKER_REJECTED). StpMakerCancels lists the canceled maker order UUIDs and
+// is set only when non-empty.
+type OrderExecution struct {
+	Matched          bool                    `json:"matched"`
+	SettlementStatus string                  `json:"settlementStatus"`
+	TradeEventID     string                  `json:"tradeEventId,omitempty"`
+	TxHash           *string                 `json:"txHash,omitempty"`
+	ClientOrderID    string                  `json:"clientOrderId,omitempty"`
+	EligibleAt       string                  `json:"eligibleAt,omitempty"`
+	Reason           string                  `json:"reason,omitempty"`
+	StpMakerCancels  []string                `json:"stpMakerCancels,omitempty"`
+	FeeRateBps       int                     `json:"feeRateBps"`
+	EffectiveFeeBps  int                     `json:"effectiveFeeBps"`
+	TotalsRaw        OrderExecutionTotalsRaw `json:"totalsRaw"`
+}
+
 // OrderResponse is returned after successfully creating an order.
 type OrderResponse struct {
-	Order        CreatedOrder `json:"order"`
-	MakerMatches []OrderMatch `json:"makerMatches,omitempty"`
+	Order        CreatedOrder   `json:"order"`
+	MakerMatches []OrderMatch   `json:"makerMatches,omitempty"`
+	Execution    OrderExecution `json:"execution"`
 }
 
 // OrderSigningConfig contains EIP-712 signing configuration.
@@ -307,6 +367,9 @@ type CreateOrderParams struct {
 	MarketSlug    string
 	Args          OrderArgs
 	ReceiveWindow ReceiveWindowOptions
+	// Optional self-trade-prevention policy. Omit to use the server default
+	// (cancel_maker).
+	StpPolicy StpPolicy
 }
 
 // UserData contains user-specific information for order operations.

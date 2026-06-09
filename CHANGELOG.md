@@ -2,6 +2,20 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Self-trade prevention (STP) on order creation:
+  - `StpPolicy` type with `StpPolicyCancelBoth`, `StpPolicyCancelMaker`, and `StpPolicyCancelTaker` values.
+  - Optional `StpPolicy` field on `CreateOrderParams` and `CreateDelegatedOrderParams`, sent top-level on the request and never inside the signed EIP-712 order. Omit it to let the matching engine apply its default (`cancel_maker`).
+- `OrderResponse.Execution` now surfaces the order execution object that the API has always returned and the SDK previously dropped:
+  - `OrderExecution` with `Matched`, `SettlementStatus` (plain string, no enum), `TradeEventID`, `TxHash`, `ClientOrderID`, `EligibleAt`, `Reason`, `StpMakerCancels`, `FeeRateBps`, `EffectiveFeeBps`, and `TotalsRaw`. On an STP self-match `Reason` carries the taker signal (for example `STP_TAKER_REJECTED`) and `StpMakerCancels` lists canceled maker order UUIDs.
+  - `OrderExecutionTotalsRaw` with the six decimal-string totals (`ContractsGross`, `ContractsFee`, `ContractsNet`, `UsdGross`, `UsdFee`, `UsdNet`). Fee bps fields are numbers; totals and maker-cancel UUIDs are strings.
+  - `Execution` is non-pointer, so a response body without it still unmarshals cleanly to the zero value.
+- `examples/clob_stp_order` showing an STP policy on a GTC order and reading the execution response.
+- Doc note on `OrderEvent` that an STP maker cancel arrives as a `CANCELLATION` frame carrying `reason: STP_MAKER_CANCELLED`, while the STP taker reject is HTTP-only.
+
 ## [1.0.11]
 
 ### Added
