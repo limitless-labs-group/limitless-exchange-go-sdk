@@ -289,10 +289,44 @@ type OrderMatch struct {
 	OrderID     string  `json:"orderId"`
 }
 
+// OrderExecutionTotalsRaw holds the raw integer-string settlement totals for an
+// order execution. All six fields are decimal strings (raw integer strings).
+type OrderExecutionTotalsRaw struct {
+	ContractsGross string `json:"contractsGross"`
+	ContractsFee   string `json:"contractsFee"`
+	ContractsNet   string `json:"contractsNet"`
+	UsdGross       string `json:"usdGross"`
+	UsdFee         string `json:"usdFee"`
+	UsdNet         string `json:"usdNet"`
+}
+
+// OrderExecution carries the taker-delay outcome plus the settlement/fee summary
+// returned alongside a created order.
+type OrderExecution struct {
+	Matched bool `json:"matched"`
+	// SettlementStatus is a plain string, not a closed enum: the server adds
+	// values over time. Known values:
+	// "UNMATCHED" | "MATCHED" | "MINED" | "CONFIRMED" | "RETRYING" | "FAILED" | "DELAYED".
+	// "DELAYED" = the taker order was accepted but is held by a per-market taker
+	// delay before being released to the matching engine.
+	SettlementStatus string  `json:"settlementStatus"`
+	TradeEventID     *string `json:"tradeEventId,omitempty"`
+	TxHash           *string `json:"txHash,omitempty"`
+	ClientOrderID    *string `json:"clientOrderId,omitempty"`
+	// EligibleAt is an ISO-8601 timestamp present only when
+	// SettlementStatus == "DELAYED": the time the order is released to the
+	// matching engine.
+	EligibleAt      *string                 `json:"eligibleAt,omitempty"`
+	FeeRateBps      float64                 `json:"feeRateBps"`
+	EffectiveFeeBps float64                 `json:"effectiveFeeBps"`
+	TotalsRaw       OrderExecutionTotalsRaw `json:"totalsRaw"`
+}
+
 // OrderResponse is returned after successfully creating an order.
 type OrderResponse struct {
-	Order        CreatedOrder `json:"order"`
-	MakerMatches []OrderMatch `json:"makerMatches,omitempty"`
+	Order        CreatedOrder    `json:"order"`
+	MakerMatches []OrderMatch    `json:"makerMatches,omitempty"`
+	Execution    *OrderExecution `json:"execution,omitempty"`
 }
 
 // OrderSigningConfig contains EIP-712 signing configuration.

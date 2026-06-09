@@ -13,6 +13,13 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
   - `OnExecutionOrderEvent(func(ExecutionOrderEvent))` for FAK/FOK terminal
     `EXECUTION` frames (`source: "OME"`, `status` `FILLED`/`PARTIALLY_FILLED`/`KILLED`).
 - Public payload types `MatchedOrderEvent` and `ExecutionOrderEvent`.
+- `OrderResponse.Execution` (`*OrderExecution`, optional) so consumers can read
+  the taker-delay outcome and the settlement/fee summary from the POST /orders
+  response. Includes `SettlementStatus` (plain string, known values
+  `UNMATCHED`/`MATCHED`/`MINED`/`CONFIRMED`/`RETRYING`/`FAILED`/`DELAYED`),
+  the `EligibleAt` taker-delay release timestamp, and the `OrderExecutionTotalsRaw`
+  raw integer-string totals. Additive and non-breaking; previously the SDK
+  dropped the response `execution` object.
 
 These additions are non-breaking: the raw `OnOrderEvent(func(OrderEvent))`
 handler and the `OrderEvent = json.RawMessage` alias are unchanged, so existing
