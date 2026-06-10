@@ -111,6 +111,49 @@ type OraclePriceData struct {
 // OrderEvent is the raw order lifecycle event payload.
 type OrderEvent = json.RawMessage
 
+// MatchedOrderEvent is a pre-settlement per-fill order event delivered on the
+// "orderEvent" socket.io event with source "SETTLEMENT" and type "MATCHED".
+// Numeric monetary fields arrive as JSON strings; fee-rate fields as JSON numbers.
+type MatchedOrderEvent struct {
+	Source               string   `json:"source"` // "SETTLEMENT"
+	Type                 string   `json:"type"`   // "MATCHED"
+	EventID              string   `json:"eventId"`
+	Price                string   `json:"price"`
+	AmountContracts      string   `json:"amountContracts,omitempty"`
+	AmountCollateral     string   `json:"amountCollateral,omitempty"`
+	FeeAmountContracts   string   `json:"feeAmountContracts,omitempty"`
+	FeeAmountCollateral  string   `json:"feeAmountCollateral,omitempty"`
+	ConfiguredFeeRateBps *float64 `json:"configuredFeeRateBps,omitempty"`
+	EffectiveFeeBps      *float64 `json:"effectiveFeeBps,omitempty"`
+	Side                 *string  `json:"side,omitempty"`  // "BUY" or "SELL"
+	Token                string   `json:"token,omitempty"` // "YES" or "NO"
+	TokenID              string   `json:"tokenId,omitempty"`
+	MarketSlug           string   `json:"marketSlug,omitempty"`
+	OrderID              string   `json:"orderId,omitempty"`
+	TakerOrderID         string   `json:"takerOrderId,omitempty"`
+	TradeEventID         string   `json:"tradeEventId,omitempty"`
+	IsEstimate           bool     `json:"isEstimate"`
+	Timestamp            string   `json:"timestamp"`
+}
+
+// ExecutionOrderEvent is the FAK/FOK terminal order event delivered on the
+// "orderEvent" socket.io event with source "OME" and type "EXECUTION".
+// Price and RemainingSize arrive as JSON numbers (flexFloat also tolerates strings).
+type ExecutionOrderEvent struct {
+	Source        string    `json:"source"` // "OME"
+	Type          string    `json:"type"`   // "EXECUTION"
+	EventID       string    `json:"eventId"`
+	Status        string    `json:"status"` // "FILLED" | "PARTIALLY_FILLED" | "KILLED"
+	Price         flexFloat `json:"price"`
+	RemainingSize flexFloat `json:"remainingSize"`
+	Token         string    `json:"token"`
+	Side          string    `json:"side"`
+	MarketID      string    `json:"marketId"`
+	OrderID       string    `json:"orderId"`
+	Timestamp     string    `json:"timestamp"`
+	UserID        int64     `json:"userId"`
+}
+
 // LiveSportsUpdate is the raw live sports snapshot payload.
 type LiveSportsUpdate = json.RawMessage
 

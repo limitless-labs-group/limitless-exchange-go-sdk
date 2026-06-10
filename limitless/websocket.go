@@ -473,9 +473,59 @@ func (ws *WebSocketClient) OnOraclePriceData(handler func(OraclePriceData)) {
 	})
 }
 
-// OnOrderEvent registers a handler for order lifecycle events.
+// OnOrderEvent registers a handler for raw order lifecycle events.
 func (ws *WebSocketClient) OnOrderEvent(handler func(OrderEvent)) {
 	ws.On("orderEvent", handler)
+}
+
+// OnMatchedOrderEvent registers a handler for pre-settlement per-fill MATCHED
+// order events. It listens on the shared "orderEvent" socket.io event and
+// dispatches only frames with type "MATCHED"; other frames are ignored.
+func (ws *WebSocketClient) OnMatchedOrderEvent(handler func(MatchedOrderEvent)) {
+	ws.On("orderEvent", func(data json.RawMessage) {
+		var disc struct {
+			Source string `json:"source"`
+			Type   string `json:"type"`
+		}
+		if err := json.Unmarshal(data, &disc); err != nil {
+			ws.logger.Error("Failed to parse orderEvent discriminator", err)
+			return
+		}
+		if disc.Type != "MATCHED" {
+			return
+		}
+		var event MatchedOrderEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			ws.logger.Error("Failed to parse matched order event", err)
+			return
+		}
+		handler(event)
+	})
+}
+
+// OnExecutionOrderEvent registers a handler for FAK/FOK terminal EXECUTION
+// order events. It listens on the shared "orderEvent" socket.io event and
+// dispatches only frames with type "EXECUTION"; other frames are ignored.
+func (ws *WebSocketClient) OnExecutionOrderEvent(handler func(ExecutionOrderEvent)) {
+	ws.On("orderEvent", func(data json.RawMessage) {
+		var disc struct {
+			Source string `json:"source"`
+			Type   string `json:"type"`
+		}
+		if err := json.Unmarshal(data, &disc); err != nil {
+			ws.logger.Error("Failed to parse orderEvent discriminator", err)
+			return
+		}
+		if disc.Type != "EXECUTION" {
+			return
+		}
+		var event ExecutionOrderEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			ws.logger.Error("Failed to parse execution order event", err)
+			return
+		}
+		handler(event)
+	})
 }
 
 // OnTransaction registers a handler for transaction events.
