@@ -309,10 +309,12 @@ type OrderExecution struct {
 	// "UNMATCHED" | "MATCHED" | "MINED" | "CONFIRMED" | "RETRYING" | "FAILED" | "DELAYED".
 	// "DELAYED" = the taker order was accepted but is held by a per-market taker
 	// delay before being released to the matching engine.
-	SettlementStatus string  `json:"settlementStatus"`
-	TradeEventID     *string `json:"tradeEventId,omitempty"`
-	TxHash           *string `json:"txHash,omitempty"`
-	ClientOrderID    *string `json:"clientOrderId,omitempty"`
+	SettlementStatus string   `json:"settlementStatus"`
+	TradeEventID     *string  `json:"tradeEventId,omitempty"`
+	TxHash           *string  `json:"txHash,omitempty"`
+	ClientOrderID    *string  `json:"clientOrderId,omitempty"`
+	Reason           *string  `json:"reason,omitempty"`
+	StpMakerCancels  []string `json:"stpMakerCancels,omitempty"`
 	// EligibleAt is an ISO-8601 timestamp present only when
 	// SettlementStatus == "DELAYED": the time the order is released to the
 	// matching engine.

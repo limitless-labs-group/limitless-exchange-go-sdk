@@ -134,6 +134,10 @@ func (c *HttpClient) Post(ctx context.Context, path string, body, result any) er
 	return c.doRequest(ctx, http.MethodPost, path, body, result)
 }
 
+func (c *HttpClient) PostRaw(ctx context.Context, path string, body any, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRaw(ctx, http.MethodPost, path, body, opts...)
+}
+
 // Patch performs a PATCH request with the given body and decodes the response into result.
 func (c *HttpClient) Patch(ctx context.Context, path string, body, result any) error {
 	return c.doRequest(ctx, http.MethodPatch, path, body, result)
