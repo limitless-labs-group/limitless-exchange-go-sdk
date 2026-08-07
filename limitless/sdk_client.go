@@ -13,6 +13,7 @@ type Client struct {
 	PartnerAccounts *PartnerAccountService
 	DelegatedOrders *DelegatedOrderService
 	ServerWallets   *ServerWalletService
+	AMM             *AMMService
 }
 
 // NewClient constructs a root SDK client with shared domain services.
@@ -36,6 +37,7 @@ func NewClientFromHTTP(httpClient *HttpClient) *Client {
 		PartnerAccounts: NewPartnerAccountService(httpClient, WithPartnerAccountLogger(logger)),
 		DelegatedOrders: NewDelegatedOrderService(httpClient, WithDelegatedOrderLogger(logger)),
 		ServerWallets:   NewServerWalletService(httpClient, WithServerWalletLogger(logger)),
+		AMM:             NewAMMService(httpClient, WithAMMLogger(logger)),
 	}
 }
 

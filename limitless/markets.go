@@ -40,6 +40,16 @@ func NewMarketFetcher(client *HttpClient, opts ...MarketFetcherOption) *MarketFe
 
 // GetActiveMarkets fetches active markets with optional query parameters.
 func (f *MarketFetcher) GetActiveMarkets(ctx context.Context, params *ActiveMarketsParams) (*ActiveMarketsResponse, error) {
+	result, err := f.GetActiveMarketsWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// GetActiveMarketsWithRawResponse is the raw-response variant of GetActiveMarkets.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (f *MarketFetcher) GetActiveMarketsWithRawResponse(ctx context.Context, params *ActiveMarketsParams) (*RawResult[ActiveMarketsResponse], error) {
 	endpoint := "/markets/active"
 
 	if params != nil {
@@ -60,46 +70,58 @@ func (f *MarketFetcher) GetActiveMarkets(ctx context.Context, params *ActiveMark
 
 	f.logger.Debug("Fetching active markets")
 
-	var result ActiveMarketsResponse
-	if err := f.client.Get(ctx, endpoint, &result); err != nil {
+	raw, err := f.client.GetRaw(ctx, endpoint)
+	result, err := decodeRawResult[ActiveMarketsResponse](raw, err)
+	if err != nil {
 		f.logger.Error("Failed to fetch active markets", err)
 		return nil, err
 	}
 
 	// Attach client for fluent API on each market
-	for i := range result.Data {
-		result.Data[i].client = f.client
+	for i := range result.Data.Data {
+		result.Data.Data[i].client = f.client
 	}
 
 	f.logger.Info("Active markets fetched successfully", map[string]any{
-		"count": len(result.Data),
-		"total": result.TotalMarketsCount,
+		"count": len(result.Data.Data),
+		"total": result.Data.TotalMarketsCount,
 	})
 
-	return &result, nil
+	return result, nil
 }
 
 // GetMarket fetches a single market by slug and caches its venue data.
 func (f *MarketFetcher) GetMarket(ctx context.Context, slug string) (*Market, error) {
+	result, err := f.GetMarketWithRawResponse(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// GetMarketWithRawResponse is the raw-response variant of GetMarket.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (f *MarketFetcher) GetMarketWithRawResponse(ctx context.Context, slug string) (*RawResult[Market], error) {
 	f.logger.Debug("Fetching market", map[string]any{"slug": slug})
 
-	var market Market
-	if err := f.client.Get(ctx, "/markets/"+url.PathEscape(slug), &market); err != nil {
+	raw, err := f.client.GetRaw(ctx, "/markets/"+url.PathEscape(slug))
+	result, err := decodeRawResult[Market](raw, err)
+	if err != nil {
 		f.logger.Error("Failed to fetch market", err, map[string]any{"slug": slug})
 		return nil, err
 	}
 
 	// Attach client for fluent API (market.GetUserOrders)
-	market.client = f.client
+	result.Data.client = f.client
 
-	if market.Venue != nil {
+	if result.Data.Venue != nil {
 		f.mu.Lock()
-		f.venueCache[slug] = *market.Venue
+		f.venueCache[slug] = *result.Data.Venue
 		f.mu.Unlock()
 
 		f.logger.Debug("Venue cached for order signing", map[string]any{
 			"slug":     slug,
-			"exchange": market.Venue.Exchange,
+			"exchange": result.Data.Venue.Exchange,
 		})
 	} else {
 		f.logger.Warn("Market has no venue data", map[string]any{"slug": slug})
@@ -107,10 +129,10 @@ func (f *MarketFetcher) GetMarket(ctx context.Context, slug string) (*Market, er
 
 	f.logger.Info("Market fetched successfully", map[string]any{
 		"slug":  slug,
-		"title": market.Title,
+		"title": result.Data.Title,
 	})
 
-	return &market, nil
+	return result, nil
 }
 
 // GetVenue returns cached venue information for a market.
@@ -129,44 +151,66 @@ func (f *MarketFetcher) GetVenue(slug string) (Venue, bool) {
 
 // GetOrderBook fetches the orderbook for a CLOB market.
 func (f *MarketFetcher) GetOrderBook(ctx context.Context, slug string) (*OrderBook, error) {
+	result, err := f.GetOrderBookWithRawResponse(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// GetOrderBookWithRawResponse is the raw-response variant of GetOrderBook.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (f *MarketFetcher) GetOrderBookWithRawResponse(ctx context.Context, slug string) (*RawResult[OrderBook], error) {
 	f.logger.Debug("Fetching orderbook", map[string]any{"slug": slug})
 
-	var ob OrderBook
-	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/orderbook", url.PathEscape(slug)), &ob); err != nil {
+	raw, err := f.client.GetRaw(ctx, fmt.Sprintf("/markets/%s/orderbook", url.PathEscape(slug)))
+	result, err := decodeRawResult[OrderBook](raw, err)
+	if err != nil {
 		f.logger.Error("Failed to fetch orderbook", err, map[string]any{"slug": slug})
 		return nil, err
 	}
 
 	f.logger.Info("Orderbook fetched successfully", map[string]any{
 		"slug": slug,
-		"bids": len(ob.Bids),
-		"asks": len(ob.Asks),
+		"bids": len(result.Data.Bids),
+		"asks": len(result.Data.Asks),
 	})
 
-	return &ob, nil
+	return result, nil
 }
 
 // GetUserOrders fetches the authenticated user's orders for a specific market.
 // Requires an API key to be set on the HttpClient.
 func (f *MarketFetcher) GetUserOrders(ctx context.Context, slug string) ([]UserOrder, error) {
+	result, err := f.GetUserOrdersWithRawResponse(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// GetUserOrdersWithRawResponse is the raw-response variant of GetUserOrders.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (f *MarketFetcher) GetUserOrdersWithRawResponse(ctx context.Context, slug string) (*RawResult[[]UserOrder], error) {
 	if err := f.client.requireAuth("GetUserOrders"); err != nil {
 		return nil, err
 	}
 
 	f.logger.Debug("Fetching user orders", map[string]any{"slug": slug})
 
-	var orders []UserOrder
-	if err := f.client.Get(ctx, fmt.Sprintf("/markets/%s/user-orders", url.PathEscape(slug)), &orders); err != nil {
+	raw, err := f.client.GetRaw(ctx, fmt.Sprintf("/markets/%s/user-orders", url.PathEscape(slug)))
+	result, err := decodeRawResult[[]UserOrder](raw, err)
+	if err != nil {
 		f.logger.Error("Failed to fetch user orders", err, map[string]any{"slug": slug})
 		return nil, err
 	}
 
 	f.logger.Info("User orders fetched successfully", map[string]any{
 		"slug":  slug,
-		"count": len(orders),
+		"count": len(result.Data),
 	})
 
-	return orders, nil
+	return result, nil
 }
 
 // GetUserOrders fetches the authenticated user's orders for this market.

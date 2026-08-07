@@ -44,6 +44,16 @@ func NewPartnerAccountService(client *HttpClient, opts ...PartnerAccountServiceO
 
 // CreateAccount creates a partner-owned profile using either server-wallet or EOA verification mode.
 func (s *PartnerAccountService) CreateAccount(ctx context.Context, input CreatePartnerAccountInput, eoaHeaders *CreatePartnerAccountEOAHeaders) (*PartnerAccountResponse, error) {
+	result, err := s.CreateAccountWithRawResponse(ctx, input, eoaHeaders)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// CreateAccountWithRawResponse is the raw-response variant of CreateAccount.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *PartnerAccountService) CreateAccountWithRawResponse(ctx context.Context, input CreatePartnerAccountInput, eoaHeaders *CreatePartnerAccountEOAHeaders) (*RawResult[PartnerAccountResponse], error) {
 	if err := s.client.requireAuth("CreatePartnerAccount"); err != nil {
 		return nil, err
 	}
@@ -63,16 +73,23 @@ func (s *PartnerAccountService) CreateAccount(ctx context.Context, input CreateP
 		headers["x-signature"] = eoaHeaders.Signature
 	}
 
-	var resp PartnerAccountResponse
-	if err := s.client.PostWithHeaders(ctx, "/profiles/partner-accounts", input, headers, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.PostRawWithHeaders(ctx, "/profiles/partner-accounts", input, headers)
+	return decodeRawResult[PartnerAccountResponse](raw, err)
 }
 
 // ListAccounts lists partner-owned accounts, or recovers a specific account by
 // address when params.Account is provided.
 func (s *PartnerAccountService) ListAccounts(ctx context.Context, params ListPartnerAccountsParams) (*ListPartnerAccountsResponse, error) {
+	result, err := s.ListAccountsWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// ListAccountsWithRawResponse is the raw-response variant of ListAccounts.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *PartnerAccountService) ListAccountsWithRawResponse(ctx context.Context, params ListPartnerAccountsParams) (*RawResult[ListPartnerAccountsResponse], error) {
 	if err := s.requireHMACAuth("ListPartnerAccounts", partnerAccountListHMACOnlyError); err != nil {
 		return nil, err
 	}
@@ -87,16 +104,23 @@ func (s *PartnerAccountService) ListAccounts(ctx context.Context, params ListPar
 		"page":    params.Page,
 	})
 
-	var resp ListPartnerAccountsResponse
-	if err := s.client.Get(ctx, path, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.GetRaw(ctx, path)
+	return decodeRawResult[ListPartnerAccountsResponse](raw, err)
 }
 
 // CheckAllowances checks delegated-trading approval readiness from live chain state
 // for a partner-created server wallet profile.
 func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
+	result, err := s.CheckAllowancesWithRawResponse(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// CheckAllowancesWithRawResponse is the raw-response variant of CheckAllowances.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *PartnerAccountService) CheckAllowancesWithRawResponse(ctx context.Context, profileID int) (*RawResult[PartnerAccountAllowanceResponse], error) {
 	if err := s.requireHMACAuth("CheckPartnerAccountAllowances", partnerAccountAllowanceHMACOnlyError); err != nil {
 		return nil, err
 	}
@@ -107,11 +131,8 @@ func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID i
 
 	s.logger.Debug("Checking partner account allowances", map[string]any{"profileId": profileID})
 
-	var resp PartnerAccountAllowanceResponse
-	if err := s.client.Get(ctx, path, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.GetRaw(ctx, path)
+	return decodeRawResult[PartnerAccountAllowanceResponse](raw, err)
 }
 
 // RetryAllowances re-checks live chain state and retries delegated-trading approvals
@@ -120,6 +141,16 @@ func (s *PartnerAccountService) CheckAllowances(ctx context.Context, profileID i
 // transaction or user operation; call CheckAllowances again after a short delay to
 // observe confirmed chain state.
 func (s *PartnerAccountService) RetryAllowances(ctx context.Context, profileID int) (*PartnerAccountAllowanceResponse, error) {
+	result, err := s.RetryAllowancesWithRawResponse(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// RetryAllowancesWithRawResponse is the raw-response variant of RetryAllowances.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *PartnerAccountService) RetryAllowancesWithRawResponse(ctx context.Context, profileID int) (*RawResult[PartnerAccountAllowanceResponse], error) {
 	if err := s.requireHMACAuth("RetryPartnerAccountAllowances", partnerAccountAllowanceHMACOnlyError); err != nil {
 		return nil, err
 	}
@@ -130,16 +161,23 @@ func (s *PartnerAccountService) RetryAllowances(ctx context.Context, profileID i
 
 	s.logger.Debug("Retrying partner account allowances", map[string]any{"profileId": profileID})
 
-	var resp PartnerAccountAllowanceResponse
-	if err := s.client.Post(ctx, path+"/retry", struct{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.PostRaw(ctx, path+"/retry", struct{}{})
+	return decodeRawResult[PartnerAccountAllowanceResponse](raw, err)
 }
 
 // AddWithdrawalAddress adds an active partner withdrawal destination allowlist
 // entry using a Privy identity token. API-token auth is not used for this endpoint.
 func (s *PartnerAccountService) AddWithdrawalAddress(ctx context.Context, identityToken string, input PartnerWithdrawalAddressInput) (*PartnerWithdrawalAddressResponse, error) {
+	result, err := s.AddWithdrawalAddressWithRawResponse(ctx, identityToken, input)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// AddWithdrawalAddressWithRawResponse is the raw-response variant of AddWithdrawalAddress.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *PartnerAccountService) AddWithdrawalAddressWithRawResponse(ctx context.Context, identityToken string, input PartnerWithdrawalAddressInput) (*RawResult[PartnerWithdrawalAddressResponse], error) {
 	if identityToken == "" {
 		return nil, fmt.Errorf("identity token is required for AddWithdrawalAddress")
 	}
@@ -149,26 +187,31 @@ func (s *PartnerAccountService) AddWithdrawalAddress(ctx context.Context, identi
 
 	s.logger.Debug("Adding partner withdrawal address", map[string]any{"address": input.Address})
 
-	var resp PartnerWithdrawalAddressResponse
-	if err := s.client.PostWithIdentity(ctx, "/portfolio/withdrawal-addresses", identityToken, input, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.PostRawWithIdentity(ctx, "/portfolio/withdrawal-addresses", identityToken, input)
+	return decodeRawResult[PartnerWithdrawalAddressResponse](raw, err)
 }
 
 // DeleteWithdrawalAddress removes a partner withdrawal destination allowlist
 // entry using a Privy identity token. API-token auth is not used for this endpoint.
 func (s *PartnerAccountService) DeleteWithdrawalAddress(ctx context.Context, identityToken string, address string) error {
+	_, err := s.DeleteWithdrawalAddressWithRawResponse(ctx, identityToken, address)
+	return err
+}
+
+// DeleteWithdrawalAddressWithRawResponse is the raw-response variant of DeleteWithdrawalAddress.
+// The endpoint returns no response body, so it exposes the full HTTP response (status,
+// headers, body) directly rather than a decoded RawResult.
+func (s *PartnerAccountService) DeleteWithdrawalAddressWithRawResponse(ctx context.Context, identityToken string, address string) (*RawResponse, error) {
 	if identityToken == "" {
-		return fmt.Errorf("identity token is required for DeleteWithdrawalAddress")
+		return nil, fmt.Errorf("identity token is required for DeleteWithdrawalAddress")
 	}
 	if address == "" {
-		return fmt.Errorf("address is required for DeleteWithdrawalAddress")
+		return nil, fmt.Errorf("address is required for DeleteWithdrawalAddress")
 	}
 
 	s.logger.Debug("Deleting partner withdrawal address", map[string]any{"address": address})
 
-	return s.client.DeleteWithIdentity(ctx, "/portfolio/withdrawal-addresses/"+url.PathEscape(address), identityToken, nil)
+	return s.client.DeleteRawWithIdentity(ctx, "/portfolio/withdrawal-addresses/"+url.PathEscape(address), identityToken)
 }
 
 func (s *PartnerAccountService) requireHMACAuth(operation string, errorMessage string) error {

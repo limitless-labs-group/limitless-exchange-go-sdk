@@ -15,7 +15,7 @@ func TestNewClient_WiresSharedServices(t *testing.T) {
 	if client.HTTP == nil || client.Markets == nil || client.Portfolio == nil || client.Pages == nil {
 		t.Fatalf("expected client services to be initialized, got %+v", client)
 	}
-	if client.ApiTokens == nil || client.PartnerAccounts == nil || client.DelegatedOrders == nil || client.ServerWallets == nil {
+	if client.ApiTokens == nil || client.PartnerAccounts == nil || client.DelegatedOrders == nil || client.ServerWallets == nil || client.AMM == nil {
 		t.Fatalf("expected new client services to be initialized, got %+v", client)
 	}
 

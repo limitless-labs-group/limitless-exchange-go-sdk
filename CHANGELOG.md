@@ -20,6 +20,14 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
   the `EligibleAt` taker-delay release timestamp, and the `OrderExecutionTotalsRaw`
   raw integer-string totals. Additive and non-breaking; previously the SDK
   dropped the response `execution` object.
+- Partner server-wallet split/merge helpers:
+  - `ServerWalletService.SplitPositions` for `POST /portfolio/split`
+  - `ServerWalletService.MergePositions` for `POST /portfolio/merge`
+  - typed split/merge request and response models using required `conditionId`, `amount`, required `venue.exchange` when no adapter is provided, required `venue.adapter` for NegRisk routing, and optional `onBehalfOf` request fields.
+  - raw split/merge API response preservation via `RawJSON()` for backend field verification.
+- `AMMService` with typed allowance check/approve/ensure workflows and AMM buy/sell requests for direct or partner-owned server wallets.
+- HMAC and Privy identity variants for AMM endpoints, strict integer-string/uint256 validation, optional transaction identifiers, and typed `422`, `425`, and `502`/`503` errors.
+- Opt-in raw HTTP responses (status, headers, and the original body) via `...WithRawResponse` methods returning a generic `RawResult[T]{ Data T; Raw *RawResponse }`, added across all API-backed service methods (Markets, Market Pages, Portfolio, API tokens, Partner accounts, Delegated orders, Server wallets, orders, and AMM). Base methods are unchanged and delegate to the raw variant. Raw mode still returns the same typed errors for `>= 400` statuses.
 
 These additions are non-breaking: the raw `OnOrderEvent(func(OrderEvent))`
 handler and the `OrderEvent = json.RawMessage` alias are unchanged, so existing
@@ -27,6 +35,7 @@ raw consumers keep working.
 
 ### Changed
 
+- Retry handling now distinguishes retryable HTTP-client timeouts from cancellation or expiry of the caller's context.
 - README, package documentation, and SDK tracking version now target `v1.1.0`.
 
 ## [1.0.11]

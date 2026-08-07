@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
@@ -114,6 +115,62 @@ func TestWithRetry_RetriesRetryableTransportError(t *testing.T) {
 	}
 	if attempts != 3 {
 		t.Fatalf("expected 3 attempts for retryable transport error, got %d", attempts)
+	}
+}
+
+func TestWithRetry_RetriesHTTPClientTimeoutWhileCallerContextIsLive(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	cfg := RetryConfig{
+		MaxRetries: 1,
+		Delays:     []time.Duration{0},
+	}
+
+	result, err := WithRetry(context.Background(), func() (string, error) {
+		attempts++
+		if attempts == 1 {
+			return "", fmt.Errorf("request failed: %w", &url.Error{
+				Op:  "Post",
+				URL: "https://api.limitless.exchange/amm/buy",
+				Err: context.DeadlineExceeded,
+			})
+		}
+		return "ok", nil
+	}, cfg)
+	if err != nil {
+		t.Fatalf("WithRetry returned error: %v", err)
+	}
+	if result != "ok" || attempts != 2 {
+		t.Fatalf("expected timeout retry success after 2 attempts, got result=%q attempts=%d", result, attempts)
+	}
+}
+
+func TestWithRetry_RetriesTypedUpstreamUnavailableError(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	cfg := RetryConfig{
+		StatusCodes: []int{http.StatusServiceUnavailable},
+		MaxRetries:  1,
+		Delays:      []time.Duration{0},
+	}
+
+	result, err := WithRetry(context.Background(), func() (string, error) {
+		attempts++
+		if attempts == 1 {
+			return "", &UpstreamUnavailableError{APIError: APIError{
+				Status:  http.StatusServiceUnavailable,
+				Message: "state store unavailable",
+			}}
+		}
+		return "ok", nil
+	}, cfg)
+	if err != nil {
+		t.Fatalf("WithRetry returned error: %v", err)
+	}
+	if result != "ok" || attempts != 2 {
+		t.Fatalf("expected upstream retry success after 2 attempts, got result=%q attempts=%d", result, attempts)
 	}
 }
 

@@ -34,58 +34,87 @@ func NewApiTokenService(client *HttpClient, opts ...ApiTokenServiceOption) *ApiT
 	return s
 }
 
-type messageResponse struct {
+// MessageResponse is a generic API response carrying a single message field.
+type MessageResponse struct {
 	Message string `json:"message"`
 }
 
 // DeriveToken creates a scoped API token using a Privy identity token.
 func (s *ApiTokenService) DeriveToken(ctx context.Context, identityToken string, input DeriveApiTokenInput) (*DeriveApiTokenResponse, error) {
+	result, err := s.DeriveTokenWithRawResponse(ctx, identityToken, input)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// DeriveTokenWithRawResponse is the raw-response variant of DeriveToken.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ApiTokenService) DeriveTokenWithRawResponse(ctx context.Context, identityToken string, input DeriveApiTokenInput) (*RawResult[DeriveApiTokenResponse], error) {
 	if identityToken == "" {
 		return nil, fmt.Errorf("identity token is required for DeriveToken")
 	}
 
-	var resp DeriveApiTokenResponse
-	if err := s.client.PostWithIdentity(ctx, "/auth/api-tokens/derive", identityToken, input, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.PostRawWithIdentity(ctx, "/auth/api-tokens/derive", identityToken, input)
+	return decodeRawResult[DeriveApiTokenResponse](raw, err)
 }
 
 // ListTokens lists active tokens for the authenticated partner profile.
 func (s *ApiTokenService) ListTokens(ctx context.Context) ([]ApiToken, error) {
+	result, err := s.ListTokensWithRawResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// ListTokensWithRawResponse is the raw-response variant of ListTokens.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ApiTokenService) ListTokensWithRawResponse(ctx context.Context) (*RawResult[[]ApiToken], error) {
 	if err := s.client.requireAuth("ListTokens"); err != nil {
 		return nil, err
 	}
 
-	var resp []ApiToken
-	if err := s.client.Get(ctx, "/auth/api-tokens", &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
+	raw, err := s.client.GetRaw(ctx, "/auth/api-tokens")
+	return decodeRawResult[[]ApiToken](raw, err)
 }
 
 // GetCapabilities retrieves self-service capability configuration using a Privy identity token.
 func (s *ApiTokenService) GetCapabilities(ctx context.Context, identityToken string) (*PartnerCapabilities, error) {
+	result, err := s.GetCapabilitiesWithRawResponse(ctx, identityToken)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// GetCapabilitiesWithRawResponse is the raw-response variant of GetCapabilities.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ApiTokenService) GetCapabilitiesWithRawResponse(ctx context.Context, identityToken string) (*RawResult[PartnerCapabilities], error) {
 	if identityToken == "" {
 		return nil, fmt.Errorf("identity token is required for GetCapabilities")
 	}
 
-	var resp PartnerCapabilities
-	if err := s.client.GetWithIdentity(ctx, "/auth/api-tokens/capabilities", identityToken, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.GetRawWithIdentity(ctx, "/auth/api-tokens/capabilities", identityToken)
+	return decodeRawResult[PartnerCapabilities](raw, err)
 }
 
 // RevokeToken revokes a token owned by the authenticated partner profile.
 func (s *ApiTokenService) RevokeToken(ctx context.Context, tokenID string) (string, error) {
-	if err := s.client.requireAuth("RevokeToken"); err != nil {
+	result, err := s.RevokeTokenWithRawResponse(ctx, tokenID)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// RevokeTokenWithRawResponse is the raw-response variant of RevokeToken.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ApiTokenService) RevokeTokenWithRawResponse(ctx context.Context, tokenID string) (*RawResult[MessageResponse], error) {
+	if err := s.client.requireAuth("RevokeToken"); err != nil {
+		return nil, err
 	}
 
-	var resp messageResponse
-	if err := s.client.Delete(ctx, "/auth/api-tokens/"+url.PathEscape(tokenID), &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := s.client.DeleteRaw(ctx, "/auth/api-tokens/"+url.PathEscape(tokenID))
+	return decodeRawResult[MessageResponse](raw, err)
 }

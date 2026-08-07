@@ -206,14 +206,14 @@ type HistoryMarketCollateral struct {
 // HistoryMarket is the market snapshot embedded in a history entry.
 type HistoryMarket struct {
 	Closed         bool                     `json:"closed"`
-	Collateral     *HistoryMarketCollateral  `json:"collateral,omitempty"`
-	Group          interface{}               `json:"group,omitempty"`
-	ConditionID    string                    `json:"conditionId,omitempty"`
-	Funding        string                    `json:"funding,omitempty"`
-	ID             string                    `json:"id"`
-	Slug           string                    `json:"slug"`
-	Title          string                    `json:"title"`
-	ExpirationDate string                    `json:"expirationDate,omitempty"`
+	Collateral     *HistoryMarketCollateral `json:"collateral,omitempty"`
+	Group          interface{}              `json:"group,omitempty"`
+	ConditionID    string                   `json:"conditionId,omitempty"`
+	Funding        string                   `json:"funding,omitempty"`
+	ID             string                   `json:"id"`
+	Slug           string                   `json:"slug"`
+	Title          string                   `json:"title"`
+	ExpirationDate string                   `json:"expirationDate,omitempty"`
 }
 
 // HistoryEntry represents a user history entry (cursor-based).

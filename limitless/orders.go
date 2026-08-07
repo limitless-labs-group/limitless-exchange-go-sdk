@@ -143,6 +143,16 @@ func (oc *OrderClient) ensureUserData(ctx context.Context) (*UserData, error) {
 
 // CreateOrder creates, signs, and submits a new order.
 func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams) (*OrderResponse, error) {
+	result, err := oc.CreateOrderWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// CreateOrderWithRawResponse is the raw-response variant of CreateOrder.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (oc *OrderClient) CreateOrderWithRawResponse(ctx context.Context, params CreateOrderParams) (*RawResult[OrderResponse], error) {
 	if err := oc.client.requireAuth("CreateOrder"); err != nil {
 		return nil, err
 	}
@@ -206,16 +216,17 @@ func (oc *OrderClient) CreateOrder(ctx context.Context, params CreateOrderParams
 	}
 
 	// Submit to API
-	var resp OrderResponse
-	if err := oc.client.Post(ctx, "/orders", payload, &resp); err != nil {
+	raw, err := oc.client.PostRaw(ctx, "/orders", payload)
+	result, err := decodeRawResult[OrderResponse](raw, err)
+	if err != nil {
 		return nil, err
 	}
 
 	oc.logger.Info("Order created successfully", map[string]any{
-		"orderId": resp.Order.ID,
+		"orderId": result.Data.Order.ID,
 	})
 
-	return &resp, nil
+	return result, nil
 }
 
 // CancelResponse is the response from a cancel operation.
@@ -225,32 +236,46 @@ type CancelResponse struct {
 
 // Cancel cancels an order by ID and returns the API message.
 func (oc *OrderClient) Cancel(ctx context.Context, orderID string) (string, error) {
-	if err := oc.client.requireAuth("Cancel"); err != nil {
+	result, err := oc.CancelWithRawResponse(ctx, orderID)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelWithRawResponse is the raw-response variant of Cancel.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (oc *OrderClient) CancelWithRawResponse(ctx context.Context, orderID string) (*RawResult[CancelResponse], error) {
+	if err := oc.client.requireAuth("Cancel"); err != nil {
+		return nil, err
 	}
 
 	oc.logger.Info("Cancelling order", map[string]any{"orderId": orderID})
 
-	var resp CancelResponse
-	if err := oc.client.Delete(ctx, "/orders/"+url.PathEscape(orderID), &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := oc.client.DeleteRaw(ctx, "/orders/"+url.PathEscape(orderID))
+	return decodeRawResult[CancelResponse](raw, err)
 }
 
 // CancelAll cancels all orders for a market and returns the API message.
 func (oc *OrderClient) CancelAll(ctx context.Context, marketSlug string) (string, error) {
-	if err := oc.client.requireAuth("CancelAll"); err != nil {
+	result, err := oc.CancelAllWithRawResponse(ctx, marketSlug)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelAllWithRawResponse is the raw-response variant of CancelAll.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (oc *OrderClient) CancelAllWithRawResponse(ctx context.Context, marketSlug string) (*RawResult[CancelResponse], error) {
+	if err := oc.client.requireAuth("CancelAll"); err != nil {
+		return nil, err
 	}
 
 	oc.logger.Info("Cancelling all orders for market", map[string]any{"marketSlug": marketSlug})
 
-	var resp CancelResponse
-	if err := oc.client.Delete(ctx, "/orders/all/"+url.PathEscape(marketSlug), &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := oc.client.DeleteRaw(ctx, "/orders/all/"+url.PathEscape(marketSlug))
+	return decodeRawResult[CancelResponse](raw, err)
 }
 
 // BuildUnsignedOrder builds an unsigned order without signing or submitting.
