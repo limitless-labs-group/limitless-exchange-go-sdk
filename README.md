@@ -309,6 +309,25 @@ msg, err := orderClient.Cancel(ctx, "order-id")
 msg, err := orderClient.CancelAll(ctx, "market-slug")
 ```
 
+### Cancel-Replace Orders
+
+Atomically cancel a resting order and submit its replacement in a single request via `POST /orders/cancel-replace`. Target the order to cancel with `CancelByOrderID` or `CancelByClientOrderID`, and set `Mode` to `CancelReplaceStopOnFailure` (skip the replacement if the cancel fails) or `CancelReplaceAllowFailure`.
+
+```go
+result, err := orderClient.CancelReplace(ctx, limitless.CancelReplaceParams{
+    Cancel: limitless.CancelByOrderID("old-order-id"), // or CancelByClientOrderID("...")
+    Mode:   limitless.CancelReplaceStopOnFailure,
+    Replacement: limitless.CancelReplaceOrderParams{
+        MarketSlug: "market-slug",
+        OrderType:  limitless.OrderTypeGTC,
+        Args:       limitless.GTCOrderArgs{TokenID: "123", Side: limitless.SideBuy, Price: 0.5, Size: 2},
+    },
+})
+// result.Cancel and result.Replacement each carry a per-leg status.
+```
+
+Replace many orders at once with `CancelReplaceBatch(ctx, []limitless.CancelReplaceParams{...})`; the response `Results` are index-aligned to the input. Partner integrations use `sdk.DelegatedOrders.CancelReplace` / `CancelReplaceBatch` with `limitless.DelegatedCancelReplaceParams` (adds `OnBehalfOf`). The single-order variant treats a `409` conflict as a decodable result rather than an error.
+
 ### WebSocket (Real-Time Streaming)
 
 ```go
