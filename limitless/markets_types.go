@@ -92,7 +92,8 @@ type OrderBook struct {
 	AdjustedMidpoint float64          `json:"adjustedMidpoint"`
 	MaxSpread        string           `json:"maxSpread"`
 	MinSize          string           `json:"minSize"`
-	LastTradePrice   float64          `json:"lastTradePrice"`
+	// LastTradePrice is nil until the market's first trade (API sends null).
+	LastTradePrice *float64 `json:"lastTradePrice"`
 }
 
 // Market represents complete market information (1:1 with API response).

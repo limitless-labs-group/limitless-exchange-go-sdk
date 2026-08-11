@@ -37,6 +37,7 @@ raw consumers keep working.
 ### Changed
 
 - Retry handling now distinguishes retryable HTTP-client timeouts from cancellation or expiry of the caller's context.
+- **BREAKING (type):** `OrderBook.LastTradePrice` is now `*float64` (was `float64`). The API sends `lastTradePrice: null` for markets with no trades yet, which previously decoded to a silent `0.0` — indistinguishable from a real zero price. Callers must nil-check; `nil` means "no trade yet."
 - README, package documentation, and SDK tracking version now target `v1.1.0`.
 
 ## [1.0.11]
