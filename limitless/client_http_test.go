@@ -122,6 +122,22 @@ func TestHttpClient_TypedErrorParsing(t *testing.T) {
 		w.WriteHeader(http.StatusConflict)
 		_, _ = w.Write([]byte(`{"message":"duplicate request"}`))
 	})
+	mux.HandleFunc("/unprocessable", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"invalid quote"}`))
+	})
+	mux.HandleFunc("/too-early", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooEarly)
+		_, _ = w.Write([]byte(`{"message":"trading is in maintenance mode"}`))
+	})
+	mux.HandleFunc("/bad-gateway", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"message":"quote upstream unavailable"}`))
+	})
+	mux.HandleFunc("/unavailable", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"message":"state store unavailable"}`))
+	})
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -151,6 +167,26 @@ func TestHttpClient_TypedErrorParsing(t *testing.T) {
 	var conflictErr *ConflictError
 	if !errors.As(err, &conflictErr) {
 		t.Fatalf("expected ConflictError, got %T (%v)", err, err)
+	}
+
+	err = client.Get(context.Background(), "/unprocessable", &out)
+	var unprocessableErr *UnprocessableEntityError
+	if !errors.As(err, &unprocessableErr) {
+		t.Fatalf("expected UnprocessableEntityError, got %T (%v)", err, err)
+	}
+
+	err = client.Get(context.Background(), "/too-early", &out)
+	var tooEarlyErr *TooEarlyError
+	if !errors.As(err, &tooEarlyErr) {
+		t.Fatalf("expected TooEarlyError, got %T (%v)", err, err)
+	}
+
+	for _, path := range []string{"/bad-gateway", "/unavailable"} {
+		err = client.Get(context.Background(), path, &out)
+		var upstreamErr *UpstreamUnavailableError
+		if !errors.As(err, &upstreamErr) {
+			t.Fatalf("expected UpstreamUnavailableError for %s, got %T (%v)", path, err, err)
+		}
 	}
 }
 

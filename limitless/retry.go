@@ -72,11 +72,14 @@ func (rc *RetryConfig) shouldRetry(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
 		return false
 	}
 	if isRetryableTransportError(err) {
 		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return false
 	}
 
 	codes := rc.StatusCodes
@@ -123,6 +126,21 @@ func retryStatusCodeFromError(err error) (int, bool) {
 		return conflictErr.Status, true
 	}
 
+	var unprocessableErr *UnprocessableEntityError
+	if errors.As(err, &unprocessableErr) {
+		return unprocessableErr.Status, true
+	}
+
+	var tooEarlyErr *TooEarlyError
+	if errors.As(err, &tooEarlyErr) {
+		return tooEarlyErr.Status, true
+	}
+
+	var upstreamErr *UpstreamUnavailableError
+	if errors.As(err, &upstreamErr) {
+		return upstreamErr.Status, true
+	}
+
 	return 0, false
 }
 
@@ -130,7 +148,7 @@ func isRetryableTransportError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
 		return false
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
@@ -139,6 +157,9 @@ func isRetryableTransportError(err error) bool {
 
 	var urlErr *neturl.Error
 	if errors.As(err, &urlErr) {
+		if urlErr.Timeout() {
+			return true
+		}
 		if urlErr.Err == nil {
 			return true
 		}
@@ -163,6 +184,9 @@ func isRetryableTransportError(err error) bool {
 			return true
 		}
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
 
 	return false
 }
@@ -180,6 +204,9 @@ func WithRetry[T any](ctx context.Context, fn func() (T, error), config RetryCon
 	result, err := fn()
 	if err == nil {
 		return result, nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return zero, ctxErr
 	}
 	if !config.shouldRetry(err) {
 		return zero, err
@@ -212,6 +239,9 @@ func WithRetry[T any](ctx context.Context, fn func() (T, error), config RetryCon
 		result, err = fn()
 		if err == nil {
 			return result, nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return zero, ctxErr
 		}
 		if !config.shouldRetry(err) {
 			return zero, err
@@ -257,6 +287,20 @@ func (rc *RetryableClient) Get(ctx context.Context, path string, result any) err
 func (rc *RetryableClient) GetRaw(ctx context.Context, path string, opts ...RequestOption) (*RawResponse, error) {
 	return WithRetry(ctx, func() (*RawResponse, error) {
 		return rc.client.GetRaw(ctx, path, opts...)
+	}, rc.config, rc.logger)
+}
+
+// PostRaw performs a raw POST request with retry logic.
+func (rc *RetryableClient) PostRaw(ctx context.Context, path string, body any, opts ...RequestOption) (*RawResponse, error) {
+	return WithRetry(ctx, func() (*RawResponse, error) {
+		return rc.client.PostRaw(ctx, path, body, opts...)
+	}, rc.config, rc.logger)
+}
+
+// DeleteRaw performs a raw DELETE request with retry logic.
+func (rc *RetryableClient) DeleteRaw(ctx context.Context, path string, opts ...RequestOption) (*RawResponse, error) {
+	return WithRetry(ctx, func() (*RawResponse, error) {
+		return rc.client.DeleteRaw(ctx, path, opts...)
 	}, rc.config, rc.logger)
 }
 

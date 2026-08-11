@@ -129,13 +129,43 @@ func (c *HttpClient) GetRaw(ctx context.Context, path string, opts ...RequestOpt
 	return c.doRequestRaw(ctx, http.MethodGet, path, nil, opts...)
 }
 
+// PostRaw performs a POST request and returns the raw response with status code and headers.
+func (c *HttpClient) PostRaw(ctx context.Context, path string, body any, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRaw(ctx, http.MethodPost, path, body, opts...)
+}
+
+// PostRawWithIdentity performs a POST request authenticated with a Privy identity
+// token and returns the raw response with status code and headers.
+func (c *HttpClient) PostRawWithIdentity(ctx context.Context, path string, identityToken string, body any, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRawWithConfig(ctx, http.MethodPost, path, body, requestExecutionConfig{identityToken: identityToken}, opts...)
+}
+
+// PostRawWithHeaders performs a POST request with additional per-request headers
+// and returns the raw response with status code and headers.
+func (c *HttpClient) PostRawWithHeaders(ctx context.Context, path string, body any, extraHeaders map[string]string, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRawWithConfig(ctx, http.MethodPost, path, body, requestExecutionConfig{extraHeaders: extraHeaders}, opts...)
+}
+
+// GetRawWithIdentity performs a GET request authenticated with a Privy identity
+// token and returns the raw response with status code and headers.
+func (c *HttpClient) GetRawWithIdentity(ctx context.Context, path string, identityToken string, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRawWithConfig(ctx, http.MethodGet, path, nil, requestExecutionConfig{identityToken: identityToken}, opts...)
+}
+
+// DeleteRaw performs a DELETE request and returns the raw response with status code and headers.
+func (c *HttpClient) DeleteRaw(ctx context.Context, path string, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRaw(ctx, http.MethodDelete, path, nil, opts...)
+}
+
+// DeleteRawWithIdentity performs a DELETE request authenticated with a Privy identity
+// token and returns the raw response with status code and headers.
+func (c *HttpClient) DeleteRawWithIdentity(ctx context.Context, path string, identityToken string, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRawWithConfig(ctx, http.MethodDelete, path, nil, requestExecutionConfig{identityToken: identityToken}, opts...)
+}
+
 // Post performs a POST request with the given body and decodes the response into result.
 func (c *HttpClient) Post(ctx context.Context, path string, body, result any) error {
 	return c.doRequest(ctx, http.MethodPost, path, body, result)
-}
-
-func (c *HttpClient) PostRaw(ctx context.Context, path string, body any, opts ...RequestOption) (*RawResponse, error) {
-	return c.doRequestRaw(ctx, http.MethodPost, path, body, opts...)
 }
 
 // Patch performs a PATCH request with the given body and decodes the response into result.
@@ -201,6 +231,17 @@ func (c *HttpClient) doRequestWithIdentity(ctx context.Context, method, path str
 }
 
 func (c *HttpClient) doRequestRaw(ctx context.Context, method, path string, body any, opts ...RequestOption) (*RawResponse, error) {
+	return c.doRequestRawWithConfig(ctx, method, path, body, requestExecutionConfig{}, opts...)
+}
+
+func (c *HttpClient) doRequestRawWithConfig(
+	ctx context.Context,
+	method,
+	path string,
+	body any,
+	exec requestExecutionConfig,
+	opts ...RequestOption,
+) (*RawResponse, error) {
 	cfg := &requestConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -224,12 +265,23 @@ func (c *HttpClient) doRequestRaw(ctx context.Context, method, path string, body
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := c.signAndSetHeaders(req, bodyBytes, "", ""); err != nil {
+	if err := c.signAndSetHeaders(req, bodyBytes, exec.identityToken, exec.bearerToken); err != nil {
 		return nil, err
+	}
+	for k, v := range exec.extraHeaders {
+		req.Header.Set(k, v)
 	}
 	if method == http.MethodDelete {
 		req.Header.Del("Content-Type")
 	}
+
+	logMeta := map[string]any{
+		"headers": c.maskedHeadersForLog(exec.extraHeaders, exec.identityToken, exec.bearerToken),
+	}
+	if len(bodyBytes) > 0 {
+		logMeta["body"] = string(bodyBytes)
+	}
+	c.logger.Debug(fmt.Sprintf("→ %s %s", method, url), logMeta)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -252,8 +304,17 @@ func (c *HttpClient) doRequestRaw(ctx context.Context, method, path string, body
 	}
 
 	if resp.StatusCode >= 400 && !isAllowed {
+		c.logger.Debug(fmt.Sprintf("✗ %d %s %s", resp.StatusCode, method, path), map[string]any{
+			"headers": headersForLog(resp.Header),
+			"error":   string(respBody),
+		})
 		return nil, parseAPIError(resp.StatusCode, respBody, path, method)
 	}
+
+	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path), map[string]any{
+		"headers": headersForLog(resp.Header),
+		"body":    string(respBody),
+	})
 
 	return &RawResponse{
 		Status:  resp.StatusCode,
@@ -325,13 +386,15 @@ func (c *HttpClient) doRequestWithConfig(
 
 	if resp.StatusCode >= 400 {
 		c.logger.Debug(fmt.Sprintf("✗ %d %s %s", resp.StatusCode, method, path), map[string]any{
-			"error": string(respBody),
+			"headers": headersForLog(resp.Header),
+			"error":   string(respBody),
 		})
 		return parseAPIError(resp.StatusCode, respBody, path, method)
 	}
 
 	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path), map[string]any{
-		"body": string(respBody),
+		"headers": headersForLog(resp.Header),
+		"body":    string(respBody),
 	})
 
 	if result != nil && len(respBody) > 0 {
@@ -431,9 +494,25 @@ func (c *HttpClient) maskedHeadersForLog(extraHeaders map[string]string, identit
 
 func isSensitiveHeader(name string) bool {
 	switch strings.ToLower(name) {
-	case "authorization", "identity", "x-api-key", "lmts-api-key", "lmts-timestamp", "lmts-signature", "x-signature":
+	case "authorization", "cookie", "identity", "set-cookie", "x-api-key", "lmts-api-key", "lmts-timestamp", "lmts-signature", "x-signature":
 		return true
 	default:
 		return false
 	}
+}
+
+func headersForLog(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	logHeaders := make(map[string]string, len(headers))
+	for key, values := range headers {
+		if isSensitiveHeader(key) {
+			logHeaders[key] = "***"
+			continue
+		}
+		logHeaders[key] = strings.Join(values, ", ")
+	}
+	return logHeaders
 }

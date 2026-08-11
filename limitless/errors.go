@@ -49,6 +49,24 @@ type ConflictError struct {
 	APIError
 }
 
+// UnprocessableEntityError represents an HTTP 422 semantic validation error,
+// such as an insufficient balance or invalid AMM quote.
+type UnprocessableEntityError struct {
+	APIError
+}
+
+// TooEarlyError represents an HTTP 425 response. AMM endpoints use this status
+// while trading is disabled by maintenance mode.
+type TooEarlyError struct {
+	APIError
+}
+
+// UpstreamUnavailableError represents an HTTP 502/503 failure in an upstream
+// dependency such as RPC, quote, submission, Redis, or market state lookup.
+type UpstreamUnavailableError struct {
+	APIError
+}
+
 // parseAPIError creates the appropriate typed error from an HTTP response.
 func parseAPIError(status int, body []byte, url, method string) error {
 	msg := extractErrorMessage(body, fmt.Sprintf("Request failed with status %d", status))
@@ -70,6 +88,12 @@ func parseAPIError(status int, body []byte, url, method string) error {
 		return &ValidationError{APIError: base}
 	case status == 409:
 		return &ConflictError{APIError: base}
+	case status == 422:
+		return &UnprocessableEntityError{APIError: base}
+	case status == 425:
+		return &TooEarlyError{APIError: base}
+	case status == 502 || status == 503:
+		return &UpstreamUnavailableError{APIError: base}
 	default:
 		return &base
 	}

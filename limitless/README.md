@@ -7,6 +7,7 @@ It provides:
 - public market and orderbook reads
 - signed CLOB order placement for `GTC`, `FAK`, and `FOK`
 - delegated order creation plus server-wallet redeem/withdraw for partner flows
+- AMM allowance setup and idempotent server-wallet buy/sell submission
 - portfolio, market-page, API-token, and partner-account APIs
 - WebSocket clients for real-time streams
 
@@ -103,6 +104,27 @@ redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWallet
 	OnBehalfOf:  12345,
 })
 
+market, _ := sdk.Markets.GetMarket(ctx, "your-market-slug")
+conditionID := *market.ConditionID
+venue := &limitless.ServerWalletVenue{Exchange: market.Venue.Exchange}
+if market.NegRiskRequestID != nil && market.Venue.Adapter != nil {
+	venue.Adapter = *market.Venue.Adapter
+}
+
+split, _ := sdk.ServerWallets.SplitPositions(ctx, limitless.SplitServerWalletParams{
+	ConditionID: conditionID,
+	Amount:      "1000000",
+	Venue:       venue,
+	OnBehalfOf:  12345,
+})
+
+merge, _ := sdk.ServerWallets.MergePositions(ctx, limitless.MergeServerWalletParams{
+	ConditionID: conditionID,
+	Amount:      "1000000",
+	Venue:       venue,
+	OnBehalfOf:  12345,
+})
+
 withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
 	Amount:      "1000000",
 	OnBehalfOf:  12345,
@@ -116,14 +138,91 @@ ownWalletWithdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServer
 
 _ = sdk.PartnerAccounts.DeleteWithdrawalAddress(ctx, os.Getenv("LIMITLESS_IDENTITY_TOKEN"), treasuryAddress)
 
-_, _, _, _, _ = allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw
+_, _, _, _, _, _, _ = allowances, withdrawalAddress, redeem, split, merge, withdraw, ownWalletWithdraw
 ```
 
-Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+Derive the scoped token with `limitless.ScopeTrading` for redeem, split, and merge calls; add `limitless.ScopeAccountCreation` only when creating child profiles and `limitless.ScopeWithdrawal` for withdraw flows. `limitless.ScopeDelegatedSigning` is needed for delegated order signing, not split/merge.
 
 Withdrawal destination allowlist management is Privy-only. Use `PartnerAccounts.AddWithdrawalAddress` and `PartnerAccounts.DeleteWithdrawalAddress` with the partner operator's Privy identity token. Scoped API-token withdrawal requests can then target the authenticated partner account address, authenticated partner smart wallet, or an active allowlisted destination. If `Destination` is omitted, the API defaults to the authenticated partner's smart wallet when present; otherwise it defaults to the authenticated partner account. Leave `OnBehalfOf` as zero only when withdrawing the authenticated caller's own server wallet to an explicit `Destination`.
 
 Allowance checks are always based on live chain reads. A retry response with submitted targets means that retry request submitted a sponsored transaction or user operation; poll `CheckAllowances` again after a short delay to observe confirmed chain state. `RetryAllowances` returns `*limitless.RateLimitError` for `429` responses, with `retryAfterSeconds` in the raw API body, and `*limitless.ConflictError` for `409` responses when another retry is already running.
+
+## AMM Partner Trading
+
+AMM calls require an HMAC token with both `trading` and `delegated_signing` scopes, or one of the `WithIdentity` methods with a Privy identity token. Legacy API keys are not supported.
+
+```go
+for _, side := range []limitless.AMMAllowanceSide{
+	limitless.AMMAllowanceSideBuy,
+	limitless.AMMAllowanceSideSell,
+} {
+	allowanceCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	_, err := sdk.AMM.EnsureAllowance(allowanceCtx, limitless.AMMAllowanceParams{
+		Market:     "your-amm-market-slug",
+		Side:       side,
+		OnBehalfOf: 12345,
+	})
+	cancel()
+	if err != nil {
+		return err
+	}
+}
+
+slippageBps := 100
+buyParams := limitless.AMMBuyParams{
+	Market:           "your-amm-market-slug",
+	OutcomeIndex:     limitless.AMMOutcomeYes,
+	CollateralAmount: "1000000",
+	SlippageBps:      &slippageBps,
+	IdempotencyKey:   "buy-unique-key-001",
+	OnBehalfOf:       12345,
+}
+
+buy, err := limitless.WithRetry(ctx, func() (*limitless.AMMBuyResponse, error) {
+	return sdk.AMM.Buy(ctx, buyParams)
+}, limitless.DefaultRetryConfig())
+```
+
+Set up the independent `BUY` and `SELL` approvals once per wallet/market. `EnsureAllowance` approves at most once and then polls the check endpoint; `Buy` and `Sell` never run this preflight automatically. Keep amounts as positive uint256 integer strings in collateral base units, and reuse the same immutable params and idempotency key when retrying a timed-out trade. The AMM endpoints share a 10-request-per-10-second limit, so avoid aggressive polling.
+
+## Raw responses
+
+Every API-backed service method has a `...WithRawResponse` sibling that returns
+the decoded value together with the underlying HTTP response (status code,
+headers, and the original body). The base method is unchanged and simply
+delegates to the raw variant, so the common path stays allocation-free.
+
+```go
+result, err := sdk.AMM.BuyWithRawResponse(ctx, buyParams)
+if err != nil {
+	return err
+}
+
+fmt.Println(result.Raw.Status)                       // e.g. 201 for a submitted buy
+fmt.Println(result.Raw.Headers.Get("X-Request-Id"))  // response headers
+fmt.Println(result.Data.Status)                      // decoded AMMBuyResponse
+
+// Base method returns the decoded value directly:
+buy, err := sdk.AMM.Buy(ctx, buyParams) // (*AMMBuyResponse, error)
+_ = buy
+```
+
+`RawResult[T]` is defined as:
+
+```go
+type RawResult[T any] struct {
+	Data T
+	Raw  *RawResponse // Status int, Headers http.Header, Body json.RawMessage
+}
+```
+
+Raw mode preserves error handling: any `>= 400` status still returns the same
+typed error (`ConflictError`, `UnprocessableEntityError`, `RateLimitError`, and
+so on) instead of a `RawResult`. AMM approvals land as `200` (already confirmed)
+or `202` (submitted) and buy/sell as `201`; all are 2xx and returned normally.
+
+Available on `Markets`, `Pages`, `Portfolio`, `ApiTokens`, `PartnerAccounts`,
+`DelegatedOrders`, `ServerWallets`, the order client, and `AMM`.
 
 ## Orders
 

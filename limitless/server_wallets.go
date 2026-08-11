@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -12,9 +13,9 @@ var (
 	serverWalletIntegerRegex     = regexp.MustCompile(`^[0-9]+$`)
 )
 
-const serverWalletHMACOnlyError = "Server wallet redeem/withdraw require HMAC-scoped API token auth; legacy API keys are not supported."
+const serverWalletHMACOnlyError = "Server wallet operations require HMAC-scoped API token auth; legacy API keys are not supported."
 
-// ServerWalletService manages redeem and withdraw operations for server-managed child wallets.
+// ServerWalletService manages server-wallet portfolio operations.
 type ServerWalletService struct {
 	client *HttpClient
 	logger Logger
@@ -44,6 +45,16 @@ func NewServerWalletService(client *HttpClient, opts ...ServerWalletServiceOptio
 
 // RedeemPositions submits a server-wallet redeem request for a resolved market condition.
 func (s *ServerWalletService) RedeemPositions(ctx context.Context, params RedeemServerWalletParams) (*RedeemServerWalletResponse, error) {
+	result, err := s.RedeemPositionsWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// RedeemPositionsWithRawResponse is the raw-response variant of RedeemPositions.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ServerWalletService) RedeemPositionsWithRawResponse(ctx context.Context, params RedeemServerWalletParams) (*RawResult[RedeemServerWalletResponse], error) {
 	if err := s.requireHMACAuth("RedeemServerWalletPositions"); err != nil {
 		return nil, err
 	}
@@ -59,18 +70,103 @@ func (s *ServerWalletService) RedeemPositions(ctx context.Context, params Redeem
 		"onBehalfOf":  params.OnBehalfOf,
 	})
 
-	var resp RedeemServerWalletResponse
-	if err := s.client.Post(ctx, "/portfolio/redeem", redeemServerWalletRequest{
+	raw, err := s.client.PostRaw(ctx, "/portfolio/redeem", redeemServerWalletRequest{
 		ConditionID: params.ConditionID,
 		OnBehalfOf:  params.OnBehalfOf,
-	}, &resp); err != nil {
+	})
+	return decodeRawResult[RedeemServerWalletResponse](raw, err)
+}
+
+// SplitPositions submits a server-wallet split request for a CLOB or NegRisk market.
+func (s *ServerWalletService) SplitPositions(ctx context.Context, params SplitServerWalletParams) (*SplitServerWalletResponse, error) {
+	result, err := s.SplitPositionsWithRawResponse(ctx, params)
+	if err != nil {
 		return nil, err
 	}
-	return &resp, nil
+	return &result.Data, nil
+}
+
+// SplitPositionsWithRawResponse is the raw-response variant of SplitPositions.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ServerWalletService) SplitPositionsWithRawResponse(ctx context.Context, params SplitServerWalletParams) (*RawResult[SplitServerWalletResponse], error) {
+	if err := s.requireHMACAuth("SplitServerWalletPositions"); err != nil {
+		return nil, err
+	}
+	request, err := buildSplitMergeServerWalletRequest(params.ConditionID, params.Amount, params.Venue, params.OnBehalfOf)
+	if err != nil {
+		return nil, err
+	}
+
+	logMeta := map[string]any{
+		"conditionId": request.ConditionID,
+		"amount":      request.Amount,
+		"onBehalfOf":  request.OnBehalfOf,
+	}
+	if request.Venue != nil {
+		if request.Venue.Exchange != "" {
+			logMeta["venue.exchange"] = request.Venue.Exchange
+		}
+		if request.Venue.Adapter != "" {
+			logMeta["venue.adapter"] = request.Venue.Adapter
+		}
+	}
+	s.logger.Debug("Splitting server-wallet positions", logMeta)
+
+	raw, err := s.client.PostRaw(ctx, "/portfolio/split", request)
+	return decodeRawResult[SplitServerWalletResponse](raw, err)
+}
+
+// MergePositions submits a server-wallet merge request for a CLOB or NegRisk market.
+func (s *ServerWalletService) MergePositions(ctx context.Context, params MergeServerWalletParams) (*MergeServerWalletResponse, error) {
+	result, err := s.MergePositionsWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// MergePositionsWithRawResponse is the raw-response variant of MergePositions.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ServerWalletService) MergePositionsWithRawResponse(ctx context.Context, params MergeServerWalletParams) (*RawResult[MergeServerWalletResponse], error) {
+	if err := s.requireHMACAuth("MergeServerWalletPositions"); err != nil {
+		return nil, err
+	}
+	request, err := buildSplitMergeServerWalletRequest(params.ConditionID, params.Amount, params.Venue, params.OnBehalfOf)
+	if err != nil {
+		return nil, err
+	}
+
+	logMeta := map[string]any{
+		"conditionId": request.ConditionID,
+		"amount":      request.Amount,
+		"onBehalfOf":  request.OnBehalfOf,
+	}
+	if request.Venue != nil {
+		if request.Venue.Exchange != "" {
+			logMeta["venue.exchange"] = request.Venue.Exchange
+		}
+		if request.Venue.Adapter != "" {
+			logMeta["venue.adapter"] = request.Venue.Adapter
+		}
+	}
+	s.logger.Debug("Merging server-wallet positions", logMeta)
+
+	raw, err := s.client.PostRaw(ctx, "/portfolio/merge", request)
+	return decodeRawResult[MergeServerWalletResponse](raw, err)
 }
 
 // Withdraw submits a server-wallet withdraw request.
 func (s *ServerWalletService) Withdraw(ctx context.Context, params WithdrawServerWalletParams) (*WithdrawServerWalletResponse, error) {
+	result, err := s.WithdrawWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// WithdrawWithRawResponse is the raw-response variant of Withdraw.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *ServerWalletService) WithdrawWithRawResponse(ctx context.Context, params WithdrawServerWalletParams) (*RawResult[WithdrawServerWalletResponse], error) {
 	if err := s.requireHMACAuth("WithdrawServerWalletFunds"); err != nil {
 		return nil, err
 	}
@@ -99,16 +195,67 @@ func (s *ServerWalletService) Withdraw(ctx context.Context, params WithdrawServe
 		"destination": params.Destination,
 	})
 
-	var resp WithdrawServerWalletResponse
-	if err := s.client.Post(ctx, "/portfolio/withdraw", withdrawServerWalletRequest{
+	raw, err := s.client.PostRaw(ctx, "/portfolio/withdraw", withdrawServerWalletRequest{
 		Amount:      params.Amount,
 		OnBehalfOf:  params.OnBehalfOf,
 		Token:       optionalStringPtr(params.Token),
 		Destination: optionalStringPtr(params.Destination),
-	}, &resp); err != nil {
-		return nil, err
+	})
+	return decodeRawResult[WithdrawServerWalletResponse](raw, err)
+}
+
+func buildSplitMergeServerWalletRequest(
+	conditionID string,
+	amount string,
+	venue *ServerWalletVenue,
+	onBehalfOf int,
+) (splitMergeServerWalletRequest, error) {
+	conditionID = strings.TrimSpace(conditionID)
+	amount = strings.TrimSpace(amount)
+
+	if conditionID == "" {
+		return splitMergeServerWalletRequest{}, fmt.Errorf("ConditionID is required")
 	}
-	return &resp, nil
+	if err := validateServerWalletConditionID(conditionID); err != nil {
+		return splitMergeServerWalletRequest{}, err
+	}
+	if err := validateServerWalletAmount(amount); err != nil {
+		return splitMergeServerWalletRequest{}, err
+	}
+	if onBehalfOf < 0 {
+		return splitMergeServerWalletRequest{}, fmt.Errorf("OnBehalfOf must be a positive integer")
+	}
+	requestVenue, err := buildSplitMergeServerWalletVenue(venue)
+	if err != nil {
+		return splitMergeServerWalletRequest{}, err
+	}
+
+	return splitMergeServerWalletRequest{
+		ConditionID: conditionID,
+		Amount:      amount,
+		Venue:       requestVenue,
+		OnBehalfOf:  onBehalfOf,
+	}, nil
+}
+
+func buildSplitMergeServerWalletVenue(venue *ServerWalletVenue) (*ServerWalletVenue, error) {
+	if venue == nil {
+		return nil, fmt.Errorf("Venue is required")
+	}
+
+	exchange := strings.TrimSpace(venue.Exchange)
+	adapter := strings.TrimSpace(venue.Adapter)
+	if exchange != "" && !isValidAddress(exchange) {
+		return nil, fmt.Errorf("Venue.Exchange must be a valid EVM address")
+	}
+	if adapter != "" && !isValidAddress(adapter) {
+		return nil, fmt.Errorf("Venue.Adapter must be a valid EVM address")
+	}
+	if adapter == "" && exchange == "" {
+		return nil, fmt.Errorf("Venue.Exchange is required when Venue.Adapter is not provided")
+	}
+
+	return &ServerWalletVenue{Exchange: exchange, Adapter: adapter}, nil
 }
 
 func (s *ServerWalletService) requireHMACAuth(operation string) error {

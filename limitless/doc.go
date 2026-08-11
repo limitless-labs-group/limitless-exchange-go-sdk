@@ -4,6 +4,7 @@
 //   - market and orderbook reads for CLOB and NegRisk markets
 //   - signed order creation for GTC, FAK, and FOK orders with optional receive-window controls
 //   - delegated order placement and partner-account workflows
+//   - server-wallet AMM allowance setup and idempotent buy/sell submission
 //   - API token management, portfolio reads, market pages, and WebSocket streams
 //
 // Typical entrypoints are NewClient for shared HTTP-backed services and

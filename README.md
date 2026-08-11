@@ -30,12 +30,14 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 - **Authentication**: Legacy API-key auth and new scoped API-key auth
 - **Order Management**: Create, cancel, and manage `GTC`, `FAK`, and `FOK` orders on CLOB and NegRisk markets, including `postOnly` for `GTC` and optional receive-window freshness checks
 - **Scoped API Keys**: Self-service key listing/capabilities, partner-account creation, delegated order placement, server-wallet redeem/withdraw
+- **AMM Partner Trading**: Server-wallet BUY/SELL allowance setup and idempotent AMM buy/sell submission
 - **Market Data**: Access real-time market data and orderbooks
 - **NegRisk Markets**: Full support for group markets with multiple outcomes
 - **Error Handling & Retry**: Automatic retry logic for rate limits, transient HTTP failures, and retryable transport errors
 - **WebSocket**: Real-time CLOB orderbook, AMM/oracle price, position, transaction, order-event, and market lifecycle streaming
 - **Market Pages & Navigation**: Navigation tree, path-based page resolution, property filters
 - **Portfolio**: Position tracking, user history, and profile access
+- **Raw Responses**: Opt-in `...WithRawResponse` variant on every API-backed method exposing HTTP status, headers, and the original body
 - **Logging**: Pluggable logger interface with built-in console logger
 
 ## Installation
@@ -307,6 +309,25 @@ msg, err := orderClient.Cancel(ctx, "order-id")
 msg, err := orderClient.CancelAll(ctx, "market-slug")
 ```
 
+### Cancel-Replace Orders
+
+Atomically cancel a resting order and submit its replacement in a single request via `POST /orders/cancel-replace`. Target the order to cancel with `CancelByOrderID` or `CancelByClientOrderID`, and set `Mode` to `CancelReplaceStopOnFailure` (skip the replacement if the cancel fails) or `CancelReplaceAllowFailure`.
+
+```go
+result, err := orderClient.CancelReplace(ctx, limitless.CancelReplaceParams{
+    Cancel: limitless.CancelByOrderID("old-order-id"), // or CancelByClientOrderID("...")
+    Mode:   limitless.CancelReplaceStopOnFailure,
+    Replacement: limitless.CancelReplaceOrderParams{
+        MarketSlug: "market-slug",
+        OrderType:  limitless.OrderTypeGTC,
+        Args:       limitless.GTCOrderArgs{TokenID: "123", Side: limitless.SideBuy, Price: 0.5, Size: 2},
+    },
+})
+// result.Cancel and result.Replacement each carry a per-leg status.
+```
+
+Replace many orders at once with `CancelReplaceBatch(ctx, []limitless.CancelReplaceParams{...})`; the response `Results` are index-aligned to the input. Partner integrations use `sdk.DelegatedOrders.CancelReplace` / `CancelReplaceBatch` with `limitless.DelegatedCancelReplaceParams` (adds `OnBehalfOf`). The single-order variant treats a `409` conflict as a decodable result rather than an error.
+
 ### WebSocket (Real-Time Streaming)
 
 ```go
@@ -405,6 +426,30 @@ redeem, _ := sdk.ServerWallets.RedeemPositions(ctx, limitless.RedeemServerWallet
     OnBehalfOf:  12345,
 })
 
+// Split and merge complete sets for a CLOB or NegRisk market.
+// CLOB/simple calls require venue.exchange. NegRisk calls require venue.adapter
+// and may also forward venue.exchange when present.
+market, _ := sdk.Markets.GetMarket(ctx, "your-market-slug")
+conditionID := *market.ConditionID
+venue := &limitless.ServerWalletVenue{Exchange: market.Venue.Exchange}
+if market.NegRiskRequestID != nil && market.Venue.Adapter != nil {
+    venue.Adapter = *market.Venue.Adapter
+}
+
+split, _ := sdk.ServerWallets.SplitPositions(ctx, limitless.SplitServerWalletParams{
+    ConditionID: conditionID,
+    Amount:      "1000000",
+    Venue:       venue,
+    OnBehalfOf:  12345,
+})
+
+merge, _ := sdk.ServerWallets.MergePositions(ctx, limitless.MergeServerWalletParams{
+    ConditionID: conditionID,
+    Amount:      "1000000",
+    Venue:       venue,
+    OnBehalfOf:  12345,
+})
+
 // Withdraw funds from the same child profile
 withdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServerWalletParams{
     Amount:      "1000000",
@@ -421,14 +466,61 @@ ownWalletWithdraw, _ := sdk.ServerWallets.Withdraw(ctx, limitless.WithdrawServer
 // Optional cleanup when the destination should no longer be active.
 _ = sdk.PartnerAccounts.DeleteWithdrawalAddress(ctx, os.Getenv("LIMITLESS_PRIVY_ACCESS_TOKEN"), treasuryAddress)
 
-_, _, _, _, _, _, _, _ = resp, allowances, withdrawalAddress, redeem, withdraw, ownWalletWithdraw, accounts, account
+_, _, _, _, _, _, _, _, _, _ = resp, allowances, withdrawalAddress, redeem, split, merge, withdraw, ownWalletWithdraw, accounts, account
 ```
 
-Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`. Derive the scoped token with `limitless.ScopeAccountCreation` and `limitless.ScopeDelegatedSigning`; add `limitless.ScopeWithdrawal` for withdraw flows.
+Use `PartnerAccounts.CheckAllowances`, `PartnerAccounts.RetryAllowances`, and `ServerWallets` only for child profiles created with `CreateServerWallet=true`. Derive the scoped token with `limitless.ScopeTrading` for redeem, split, and merge calls; add `limitless.ScopeAccountCreation` only when creating child profiles and `limitless.ScopeWithdrawal` for withdraw flows. `limitless.ScopeDelegatedSigning` is needed for delegated order signing, not split/merge.
 
 Withdrawal destination allowlist management is Privy-only. Use `PartnerAccounts.AddWithdrawalAddress` and `PartnerAccounts.DeleteWithdrawalAddress` with the partner operator's Privy access token. Scoped API-token withdrawal requests can then target the authenticated partner account address, authenticated partner smart wallet, or an active allowlisted destination. If `Destination` is omitted, the API defaults to the authenticated partner's smart wallet when present; otherwise it defaults to the authenticated partner account. Leave `OnBehalfOf` as zero only when withdrawing the authenticated caller's own server wallet to an explicit `Destination`.
 
 For allowance recovery, poll `CheckAllowances` first. If `Ready` is false and one or more targets are `missing` or `failed` with `Retryable=true`, call `RetryAllowances`, then poll `CheckAllowances` again after a short delay. A `429` is returned as `*limitless.RateLimitError`; its API body includes `retryAfterSeconds` in `err.Data`. A `409` is returned as `*limitless.ConflictError` and means another retry is already running, so wait briefly and check status again.
+
+### AMM Partner Trading
+
+AMM trading uses the core API host and requires either an HMAC token with both `trading` and `delegated_signing` scopes or a Privy identity token. Legacy API keys are rejected. Set up the independent `BUY` and `SELL` approvals once for each server-wallet/market pair; `Buy` and `Sell` intentionally do not perform an allowance preflight.
+
+```go
+childProfileID := 12345
+marketSlug := "your-amm-market-slug"
+
+// EnsureAllowance checks first, submits approval at most once, then polls check.
+// The context controls how long to wait for on-chain confirmation.
+for _, side := range []limitless.AMMAllowanceSide{
+    limitless.AMMAllowanceSideBuy,
+    limitless.AMMAllowanceSideSell,
+} {
+    allowanceCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+    _, err := sdk.AMM.EnsureAllowance(allowanceCtx, limitless.AMMAllowanceParams{
+        Market:     marketSlug,
+        Side:       side,
+        OnBehalfOf: childProfileID,
+    })
+    cancel()
+    if err != nil {
+        return err
+    }
+}
+
+slippageBps := 100
+buyParams := limitless.AMMBuyParams{
+    Market:           marketSlug,
+    OutcomeIndex:     limitless.AMMOutcomeYes,
+    CollateralAmount: "1000000", // collateral base units; never use float64
+    SlippageBps:      &slippageBps,
+    IdempotencyKey:   "buy-unique-key-001",
+    OnBehalfOf:       childProfileID,
+}
+
+// On a timeout or transient failure, reuse this immutable params value so the
+// serialized body and idempotency key remain identical.
+buy, err := limitless.WithRetry(ctx, func() (*limitless.AMMBuyResponse, error) {
+    return sdk.AMM.Buy(ctx, buyParams)
+}, limitless.DefaultRetryConfig())
+```
+
+`ApproveAllowance` may return `status: "submitted"` before the approval is confirmed; poll `CheckAllowance`, or use `EnsureAllowance`, instead of approving repeatedly. The four AMM endpoints share a 10-request-per-10-second rate limit, so the helper polls every two seconds by default. Amounts must be positive uint256 integer strings in collateral base units. `SlippageBps` may be `nil` for the API default or point to a value from `0` through `1000`; transaction identifiers in responses are independently optional.
+
+For Privy auth, use the corresponding `CheckAllowanceWithIdentity`, `ApproveAllowanceWithIdentity`, `EnsureAllowanceWithIdentity`, `BuyWithIdentity`, and `SellWithIdentity` methods. HTTP `409`, `422`, `425`, `429`, and `502`/`503` responses map to `ConflictError`, `UnprocessableEntityError`, `TooEarlyError`, `RateLimitError`, and `UpstreamUnavailableError`, respectively.
 
 **Available Channels:**
 
@@ -560,6 +652,40 @@ type Logger interface {
 }
 ```
 
+## Raw Responses
+
+Every API-backed service method has a `...WithRawResponse` sibling that returns
+the decoded value alongside the underlying HTTP response — status code, headers,
+and the original body. The base method is unchanged and delegates to the raw
+variant, keeping the common path allocation-free while making status/header
+inspection opt-in.
+
+```go
+result, err := sdk.AMM.BuyWithRawResponse(ctx, buyParams)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Println(result.Raw.Status)                      // 201 for a submitted buy
+fmt.Println(result.Raw.Headers.Get("X-Request-Id")) // response headers
+fmt.Println(result.Data.Status)                     // decoded AMMBuyResponse
+```
+
+`RawResult[T]` wraps the decoded value and the raw response:
+
+```go
+type RawResult[T any] struct {
+    Data T
+    Raw  *RawResponse // Status int, Headers http.Header, Body json.RawMessage
+}
+```
+
+Raw mode preserves typed error handling: any `>= 400` status still returns the
+same typed error (`ConflictError`, `UnprocessableEntityError`, `RateLimitError`,
+and so on) rather than a `RawResult`. It is available across `Markets`, `Pages`,
+`Portfolio`, `ApiTokens`, `PartnerAccounts`, `DelegatedOrders`, `ServerWallets`,
+the order client, and `AMM`.
+
 ## Examples
 
 Runnable examples are available in the [`examples/`](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/tree/main/examples) directory:
@@ -612,6 +738,8 @@ limitless/
 ├── client.go              # HTTP client with connection pooling
 ├── client_options.go      # Functional options for HttpClient
 ├── constants.go           # Chain IDs, contract addresses, URLs
+├── amm.go                 # AMMService (allowances, buy, sell)
+├── amm_types.go           # AMM request and response types
 ├── errors.go              # Typed errors (APIError, RateLimitError, etc.)
 ├── logger.go              # Logger interface and ConsoleLogger
 ├── markets.go             # MarketFetcher (market data, orderbook, user orders)

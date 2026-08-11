@@ -39,6 +39,16 @@ func NewDelegatedOrderService(client *HttpClient, opts ...DelegatedOrderServiceO
 
 // CreateOrder builds an unsigned order and lets the API sign it on behalf of a target profile.
 func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDelegatedOrderParams) (*OrderResponse, error) {
+	result, err := s.CreateOrderWithRawResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+// CreateOrderWithRawResponse is the raw-response variant of CreateOrder.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *DelegatedOrderService) CreateOrderWithRawResponse(ctx context.Context, params CreateDelegatedOrderParams) (*RawResult[OrderResponse], error) {
 	if err := s.client.requireAuth("CreateDelegatedOrder"); err != nil {
 		return nil, err
 	}
@@ -84,69 +94,94 @@ func (s *DelegatedOrderService) CreateOrder(ctx context.Context, params CreateDe
 		RecvWindow: receiveWindow.RecvWindow,
 	}
 
-	var resp OrderResponse
-	if err := s.client.Post(ctx, "/orders", payload, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	raw, err := s.client.PostRaw(ctx, "/orders", payload)
+	return decodeRawResult[OrderResponse](raw, err)
 }
 
 // Cancel cancels a delegated order by ID and returns the API message.
 func (s *DelegatedOrderService) Cancel(ctx context.Context, orderID string) (string, error) {
-	if err := s.client.requireAuth("CancelDelegatedOrder"); err != nil {
+	result, err := s.CancelWithRawResponse(ctx, orderID)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelWithRawResponse is the raw-response variant of Cancel.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *DelegatedOrderService) CancelWithRawResponse(ctx context.Context, orderID string) (*RawResult[CancelResponse], error) {
+	if err := s.client.requireAuth("CancelDelegatedOrder"); err != nil {
+		return nil, err
 	}
 
-	var resp CancelResponse
-	if err := s.client.Delete(ctx, "/orders/"+url.PathEscape(orderID), &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := s.client.DeleteRaw(ctx, "/orders/"+url.PathEscape(orderID))
+	return decodeRawResult[CancelResponse](raw, err)
 }
 
 // CancelOnBehalfOf cancels a delegated order by ID for a target profile and returns the API message.
 func (s *DelegatedOrderService) CancelOnBehalfOf(ctx context.Context, orderID string, onBehalfOf int) (string, error) {
-	if err := s.client.requireAuth("CancelDelegatedOrder"); err != nil {
+	result, err := s.CancelOnBehalfOfWithRawResponse(ctx, orderID, onBehalfOf)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelOnBehalfOfWithRawResponse is the raw-response variant of CancelOnBehalfOf.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *DelegatedOrderService) CancelOnBehalfOfWithRawResponse(ctx context.Context, orderID string, onBehalfOf int) (*RawResult[CancelResponse], error) {
+	if err := s.client.requireAuth("CancelDelegatedOrder"); err != nil {
+		return nil, err
 	}
 	if onBehalfOf <= 0 {
-		return "", fmt.Errorf("OnBehalfOf must be a positive integer")
+		return nil, fmt.Errorf("OnBehalfOf must be a positive integer")
 	}
 
-	var resp CancelResponse
 	path := fmt.Sprintf("/orders/%s?onBehalfOf=%d", url.PathEscape(orderID), onBehalfOf)
-	if err := s.client.Delete(ctx, path, &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := s.client.DeleteRaw(ctx, path)
+	return decodeRawResult[CancelResponse](raw, err)
 }
 
 // CancelAll cancels all delegated orders for a market and returns the API message.
 func (s *DelegatedOrderService) CancelAll(ctx context.Context, marketSlug string) (string, error) {
-	if err := s.client.requireAuth("CancelAllDelegatedOrders"); err != nil {
+	result, err := s.CancelAllWithRawResponse(ctx, marketSlug)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelAllWithRawResponse is the raw-response variant of CancelAll.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *DelegatedOrderService) CancelAllWithRawResponse(ctx context.Context, marketSlug string) (*RawResult[CancelResponse], error) {
+	if err := s.client.requireAuth("CancelAllDelegatedOrders"); err != nil {
+		return nil, err
 	}
 
-	var resp CancelResponse
-	if err := s.client.Delete(ctx, "/orders/all/"+url.PathEscape(marketSlug), &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := s.client.DeleteRaw(ctx, "/orders/all/"+url.PathEscape(marketSlug))
+	return decodeRawResult[CancelResponse](raw, err)
 }
 
 // CancelAllOnBehalfOf cancels all delegated orders for a market for a target profile and returns the API message.
 func (s *DelegatedOrderService) CancelAllOnBehalfOf(ctx context.Context, marketSlug string, onBehalfOf int) (string, error) {
-	if err := s.client.requireAuth("CancelAllDelegatedOrders"); err != nil {
+	result, err := s.CancelAllOnBehalfOfWithRawResponse(ctx, marketSlug, onBehalfOf)
+	if err != nil {
 		return "", err
+	}
+	return result.Data.Message, nil
+}
+
+// CancelAllOnBehalfOfWithRawResponse is the raw-response variant of CancelAllOnBehalfOf.
+// It returns the decoded value alongside the full HTTP response (status, headers, body).
+func (s *DelegatedOrderService) CancelAllOnBehalfOfWithRawResponse(ctx context.Context, marketSlug string, onBehalfOf int) (*RawResult[CancelResponse], error) {
+	if err := s.client.requireAuth("CancelAllDelegatedOrders"); err != nil {
+		return nil, err
 	}
 	if onBehalfOf <= 0 {
-		return "", fmt.Errorf("OnBehalfOf must be a positive integer")
+		return nil, fmt.Errorf("OnBehalfOf must be a positive integer")
 	}
 
-	var resp CancelResponse
 	path := fmt.Sprintf("/orders/all/%s?onBehalfOf=%d", url.PathEscape(marketSlug), onBehalfOf)
-	if err := s.client.Delete(ctx, path, &resp); err != nil {
-		return "", err
-	}
-	return resp.Message, nil
+	raw, err := s.client.DeleteRaw(ctx, path)
+	return decodeRawResult[CancelResponse](raw, err)
 }
