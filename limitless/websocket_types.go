@@ -72,6 +72,7 @@ type OrderbookData struct {
 	Asks             []OrderBookEntry `json:"asks"`
 	TokenID          string           `json:"tokenId"`
 	AdjustedMidpoint float64          `json:"adjustedMidpoint"`
+	Midpoint         float64          `json:"midpoint"` // Midpoint of the best displayed bid and ask, without the minSize filter
 	MaxSpread        flexFloat        `json:"maxSpread"`
 	MinSize          flexFloat        `json:"minSize"`
 }
@@ -80,6 +81,7 @@ type OrderbookData struct {
 type OrderbookUpdate struct {
 	MarketSlug string          `json:"marketSlug"`
 	Orderbook  OrderbookData   `json:"orderbook"`
+	Version    int64           `json:"version"`   // Publisher sequence; 0 when the initial snapshot came from the DB fallback
 	Timestamp  json.RawMessage `json:"timestamp"` // Can be string, number, or date
 }
 

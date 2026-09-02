@@ -2,6 +2,12 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `Version` on `OrderbookUpdate` and `Midpoint` on `OrderbookData`, matching the `orderbookUpdate` wire frame. `Version` is the publisher sequence for the book (`0` when the initial snapshot came from the database fallback); use it to drop an out-of-order frame right after subscribing. `Midpoint` is the midpoint of the best displayed bid and ask without the `minSize` filter that `AdjustedMidpoint` applies.
+
 ## [1.1.0]
 
 ### Added

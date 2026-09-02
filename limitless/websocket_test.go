@@ -119,9 +119,11 @@ func TestWebSocketClient_OnOrderbookUpdate_Parsing(t *testing.T) {
 			"asks":[{"price":0.52,"size":120,"side":"sell"}],
 			"tokenId":"123",
 			"adjustedMidpoint":0.515,
+			"midpoint":0.51,
 			"maxSpread":0.05,
 			"minSize":1
 		},
+		"version":48213,
 		"timestamp":"2026-03-17T00:00:00.000Z"
 	}`))
 
@@ -133,6 +135,12 @@ func TestWebSocketClient_OnOrderbookUpdate_Parsing(t *testing.T) {
 	}
 	if len(received.Orderbook.Bids) != 1 || len(received.Orderbook.Asks) != 1 {
 		t.Fatalf("expected one bid/ask, got bids=%d asks=%d", len(received.Orderbook.Bids), len(received.Orderbook.Asks))
+	}
+	if received.Version != 48213 {
+		t.Fatalf("expected version 48213, got %d", received.Version)
+	}
+	if received.Orderbook.Midpoint != 0.51 {
+		t.Fatalf("expected midpoint 0.51, got %f", received.Orderbook.Midpoint)
 	}
 }
 
@@ -169,6 +177,9 @@ func TestWebSocketClient_OnOrderbookUpdate_ParsingStringEncodedScalars(t *testin
 	}
 	if received.Orderbook.MinSize.Float64() != 100000000 {
 		t.Fatalf("expected minSize 100000000, got %f", received.Orderbook.MinSize.Float64())
+	}
+	if received.Version != 0 || received.Orderbook.Midpoint != 0 {
+		t.Fatalf("expected zero version/midpoint when absent, got version=%d midpoint=%f", received.Version, received.Orderbook.Midpoint)
 	}
 }
 
