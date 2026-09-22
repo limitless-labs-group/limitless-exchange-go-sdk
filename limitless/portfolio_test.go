@@ -15,9 +15,11 @@ func TestPortfolioFetcher_GetProfile(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/profiles/"+address, func(w http.ResponseWriter, r *http.Request) {
+		effectiveFee := 0
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":      42,
-			"account": address,
+			"id":                  42,
+			"account":             address,
+			"effectiveFeeRateBps": effectiveFee,
 			"rank": map[string]any{
 				"id":         1,
 				"name":       "Gold",
@@ -41,6 +43,9 @@ func TestPortfolioFetcher_GetProfile(t *testing.T) {
 	}
 	if profile.Rank == nil || profile.Rank.FeeRateBps != 250 {
 		t.Fatalf("expected rank feeRateBps=250, got %+v", profile.Rank)
+	}
+	if profile.EffectiveFeeRateBps == nil || *profile.EffectiveFeeRateBps != 0 {
+		t.Fatalf("expected effectiveFeeRateBps=0, got %v", profile.EffectiveFeeRateBps)
 	}
 }
 

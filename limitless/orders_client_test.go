@@ -3,6 +3,7 @@ package limitless
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -164,6 +165,140 @@ func TestOrderClient_CreateOrder_PipelineAndCaching(t *testing.T) {
 	if got := atomic.LoadInt32(&orderHits); got != 2 {
 		t.Fatalf("expected two order submissions, got %d", got)
 	}
+}
+
+func TestOrderClient_CreateOrder_FeeMismatchIsRequestLocal(t *testing.T) {
+	t.Parallel()
+
+	var orderFees []int
+	var orderSalts []int64
+	var cancelReplaceFee int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/profiles/"+testSignerAddress, func(w http.ResponseWriter, r *http.Request) {
+		effectiveFee := 300
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                  42,
+			"account":             testSignerAddress,
+			"effectiveFeeRateBps": effectiveFee,
+			"rank":                map[string]any{"feeRateBps": 450},
+		})
+	})
+	mux.HandleFunc("/markets/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"slug": strings.TrimPrefix(r.URL.Path, "/markets/"),
+			"venue": map[string]any{
+				"exchange": "0xa4409D988CA2218d956BeEFD3874100F444f0DC3",
+			},
+		})
+	})
+	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
+		var payload NewOrderPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode order payload: %v", err)
+		}
+		orderFees = append(orderFees, payload.Order.FeeRateBps)
+		orderSalts = append(orderSalts, payload.Order.Salt)
+		if len(orderFees) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"code":"FEE_RATE_MISMATCH","expectedFeeRateBps":0}`))
+			return
+		}
+		writeCreatedOrderResponse(t, w, payload, fmt.Sprintf("order-%d", len(orderFees)))
+	})
+	mux.HandleFunc("/orders/cancel-replace", func(w http.ResponseWriter, r *http.Request) {
+		var payload CancelReplaceRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode cancel-replace payload: %v", err)
+		}
+		cancelReplaceFee = payload.Replacement.Order.FeeRateBps
+		_, _ = w.Write([]byte(cancelReplaceFailureResponse))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	orderClient, err := NewOrderClient(NewHttpClient(WithBaseURL(srv.URL), WithAPIKey("test-key")), testPrivateKeyHex)
+	if err != nil {
+		t.Fatalf("NewOrderClient returned error: %v", err)
+	}
+	params := CreateOrderParams{
+		OrderType: OrderTypeGTC,
+		Args:      GTCOrderArgs{TokenID: "12345", Side: SideBuy, Price: 0.5, Size: 2},
+	}
+	params.MarketSlug = "fee-disabled"
+	if _, err := orderClient.CreateOrder(context.Background(), params); err != nil {
+		t.Fatalf("fee-disabled CreateOrder returned error: %v", err)
+	}
+	params.MarketSlug = "fee-enabled"
+	if _, err := orderClient.CreateOrder(context.Background(), params); err != nil {
+		t.Fatalf("fee-enabled CreateOrder returned error: %v", err)
+	}
+	if _, err := orderClient.CancelReplace(context.Background(), CancelReplaceParams{
+		Cancel: CancelByOrderID("old-order"),
+		Mode:   CancelReplaceStopOnFailure,
+		Replacement: CancelReplaceOrderParams{
+			MarketSlug: "fee-enabled",
+			OrderType:  OrderTypeGTC,
+			Args:       params.Args,
+		},
+	}); err != nil {
+		t.Fatalf("CancelReplace returned error: %v", err)
+	}
+
+	if got, want := fmt.Sprint(orderFees), "[300 0 300]"; got != want {
+		t.Fatalf("unexpected create-order fees: got %s want %s", got, want)
+	}
+	if orderSalts[0] == orderSalts[1] {
+		t.Fatal("retry must rebuild order with a new salt")
+	}
+	if cancelReplaceFee != 300 {
+		t.Fatalf("expected fee-enabled cancel-replace fee 300, got %d", cancelReplaceFee)
+	}
+	if orderClient.userData.FeeRateBps != 300 || orderClient.builder.feeRateBps != 300 {
+		t.Fatalf("market retry mutated cached profile fee: user=%d builder=%d", orderClient.userData.FeeRateBps, orderClient.builder.feeRateBps)
+	}
+}
+
+func TestFeeRateMismatchExpectedFee_RequiresExactPreAdmissionError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		fee  int
+		ok   bool
+	}{
+		{name: "exact integer including zero", err: &ValidationError{APIError: APIError{Status: 400, Data: []byte(`{"code":"FEE_RATE_MISMATCH","expectedFeeRateBps":0}`)}}, fee: 0, ok: true},
+		{name: "fractional expected fee", err: &ValidationError{APIError: APIError{Status: 400, Data: []byte(`{"code":"FEE_RATE_MISMATCH","expectedFeeRateBps":1.5}`)}}},
+		{name: "string expected fee", err: &ValidationError{APIError: APIError{Status: 400, Data: []byte(`{"code":"FEE_RATE_MISMATCH","expectedFeeRateBps":"0"}`)}}},
+		{name: "other validation", err: &ValidationError{APIError: APIError{Status: 400, Data: []byte(`{"code":"OTHER","expectedFeeRateBps":0}`)}}},
+		{name: "server error", err: &APIError{Status: 500, Data: []byte(`{"code":"FEE_RATE_MISMATCH","expectedFeeRateBps":0}`)}},
+		{name: "network error", err: context.DeadlineExceeded},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fee, ok := feeRateMismatchExpectedFee(test.err)
+			if fee != test.fee || ok != test.ok {
+				t.Fatalf("got (%d, %t), want (%d, %t)", fee, ok, test.fee, test.ok)
+			}
+		})
+	}
+}
+
+func writeCreatedOrderResponse(t *testing.T, w http.ResponseWriter, payload NewOrderPayload, orderID string) {
+	t.Helper()
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"order": map[string]any{
+			"id": orderID, "createdAt": "2026-03-17T00:00:00.000Z",
+			"makerAmount": payload.Order.MakerAmount, "takerAmount": payload.Order.TakerAmount,
+			"expiration": payload.Order.Expiration, "signatureType": payload.Order.SignatureType,
+			"salt": payload.Order.Salt, "maker": payload.Order.Maker, "signer": payload.Order.Signer,
+			"taker": payload.Order.Taker, "tokenId": payload.Order.TokenID, "side": payload.Order.Side,
+			"feeRateBps": payload.Order.FeeRateBps, "nonce": payload.Order.Nonce,
+			"signature": payload.Order.Signature, "orderType": payload.OrderType,
+			"price": payload.Order.Price, "marketId": 7,
+		},
+		"makerMatches": []any{},
+	})
 }
 
 func TestOrderClient_CreateOrder_ReceiveWindowTopLevelOnly(t *testing.T) {
