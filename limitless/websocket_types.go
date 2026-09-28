@@ -138,7 +138,9 @@ type MatchedOrderEvent struct {
 
 // ExecutionOrderEvent is the FAK/FOK terminal order event delivered on the
 // "orderEvent" socket.io event with source "OME" and type "EXECUTION".
-// Price and RemainingSize arrive as JSON numbers (flexFloat also tolerates strings).
+// Unlike lifecycle frames, Price and RemainingSize arrive as JSON strings;
+// flexFloat decodes both encodings. RemainingSize is in raw 6-decimal units
+// ("0" on FILLED, the original size on KILLED), so divide by 1e6 for shares.
 type ExecutionOrderEvent struct {
 	Source        string    `json:"source"` // "OME"
 	Type          string    `json:"type"`   // "EXECUTION"

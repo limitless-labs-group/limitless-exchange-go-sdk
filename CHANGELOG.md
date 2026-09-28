@@ -2,6 +2,12 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- `ExecutionOrderEvent` documentation: `price` and `remainingSize` arrive as JSON strings on the terminal `EXECUTION` frame (lifecycle frames send numbers), and `remainingSize` is in raw 6-decimal units. Decoding was already correct via `flexFloat`; only the doc comment claimed numbers.
+
 ## [1.1.0]
 
 ### Added
