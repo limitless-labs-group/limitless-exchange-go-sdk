@@ -1,6 +1,7 @@
 package limitless
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -93,11 +94,55 @@ type AmmPriceEntry struct {
 }
 
 // NewPriceData is the AMM price update event.
+//
+// Live frames carry updatedPrices as an array and no top-level marketAddress.
+// The initial snapshot sent right after subscribe_market_prices carries
+// marketAddress, blockNumber 0 and updatedPrices as a single object; the
+// custom UnmarshalJSON normalizes that object into a one-element slice.
 type NewPriceData struct {
 	MarketAddress string          `json:"marketAddress"`
 	UpdatedPrices []AmmPriceEntry `json:"updatedPrices"`
 	BlockNumber   int64           `json:"blockNumber"`
 	Timestamp     json.RawMessage `json:"timestamp"` // Can be string, number, or date
+}
+
+// UnmarshalJSON accepts updatedPrices as either an array (live frames) or a
+// single object (initial snapshot).
+func (n *NewPriceData) UnmarshalJSON(data []byte) error {
+	type newPriceDataWire struct {
+		MarketAddress string          `json:"marketAddress"`
+		UpdatedPrices json.RawMessage `json:"updatedPrices"`
+		BlockNumber   int64           `json:"blockNumber"`
+		Timestamp     json.RawMessage `json:"timestamp"`
+	}
+	var wire newPriceDataWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	n.MarketAddress = wire.MarketAddress
+	n.BlockNumber = wire.BlockNumber
+	n.Timestamp = wire.Timestamp
+	n.UpdatedPrices = nil
+
+	raw := bytes.TrimSpace(wire.UpdatedPrices)
+	switch {
+	case len(raw) == 0 || bytes.Equal(raw, []byte("null")):
+		return nil
+	case raw[0] == '{':
+		var one AmmPriceEntry
+		if err := json.Unmarshal(raw, &one); err != nil {
+			return fmt.Errorf("newPriceData: cannot decode updatedPrices object: %w", err)
+		}
+		n.UpdatedPrices = []AmmPriceEntry{one}
+		return nil
+	default:
+		var many []AmmPriceEntry
+		if err := json.Unmarshal(raw, &many); err != nil {
+			return fmt.Errorf("newPriceData: cannot decode updatedPrices array: %w", err)
+		}
+		n.UpdatedPrices = many
+		return nil
+	}
 }
 
 // OraclePriceData is the oracle price update event.
@@ -152,6 +197,10 @@ type ExecutionOrderEvent struct {
 	OrderID       string    `json:"orderId"`
 	Timestamp     string    `json:"timestamp"`
 	UserID        int64     `json:"userId"`
+	ClientOrderID *string   `json:"clientOrderId,omitempty"`
+	Reason        *string   `json:"reason,omitempty"`
+	OccurredAt    *string   `json:"occurredAt,omitempty"`
+	PublishedAt   *string   `json:"publishedAt,omitempty"`
 }
 
 // LiveSportsUpdate is the raw live sports snapshot payload.

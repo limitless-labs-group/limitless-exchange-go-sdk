@@ -140,3 +140,36 @@ func TestMarketPageFetcher_GetPropertyEndpoints_EscapeIDs(t *testing.T) {
 		t.Fatalf("unexpected options: %+v", options)
 	}
 }
+
+func TestMarketPageFetcher_GetMarkets_ExpandsStringSliceFilters(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/market-pages/", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q["ticker"]; len(got) != 2 || got[0] != "btc" || got[1] != "eth" {
+			t.Fatalf("expected ticker=btc&ticker=eth, got %v (raw %s)", got, r.URL.RawQuery)
+		}
+		if got := q.Get("duration"); got != "hourly" {
+			t.Fatalf("expected duration=hourly, got %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data":   []any{},
+			"cursor": map[string]any{"nextCursor": nil},
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	fetcher := NewMarketPageFetcher(NewHttpClient(WithBaseURL(srv.URL)))
+	_, err := fetcher.GetMarkets(context.Background(), "crypto", &MarketPageMarketsParams{
+		Filters: map[string]any{
+			"ticker":   []string{"btc", "eth"},
+			"duration": "hourly",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetMarkets returned error: %v", err)
+	}
+}

@@ -311,7 +311,7 @@ msg, err := orderClient.CancelAll(ctx, "market-slug")
 
 ### Cancel-Replace Orders
 
-Atomically cancel a resting order and submit its replacement in a single request via `POST /orders/cancel-replace`. Target the order to cancel with `CancelByOrderID` or `CancelByClientOrderID`, and set `Mode` to `CancelReplaceStopOnFailure` (skip the replacement if the cancel fails) or `CancelReplaceAllowFailure`.
+Cancel a resting order and submit its replacement in a single request via `POST /orders/cancel-replace`. The two legs are not atomic: each reports its own outcome, and `Mode` decides whether a failed cancel skips the replacement. Target the order to cancel with `CancelByOrderID` or `CancelByClientOrderID`, and set `Mode` to `CancelReplaceStopOnFailure` (skip the replacement if the cancel fails) or `CancelReplaceAllowFailure`.
 
 ```go
 result, err := orderClient.CancelReplace(ctx, limitless.CancelReplaceParams{

@@ -505,3 +505,157 @@ func TestWebSocketClient_Connect_PropagatesHMACCredentials(t *testing.T) {
 		t.Fatalf("Connect returned error: %v", err)
 	}
 }
+
+func TestWebSocketClient_OnNewPriceData_ParsesLiveArrayFrame(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received NewPriceData
+	called := false
+	ws.OnNewPriceData(func(update NewPriceData) {
+		called = true
+		received = update
+	})
+
+	// Live frame: updatedPrices is an array and there is no top-level marketAddress.
+	ws.dispatchLocal("newPriceData", json.RawMessage(`{
+		"updatedPrices":[
+			{"marketAddress":"0xabc","marketId":42,"yesPrice":0.61,"noPrice":0.39},
+			{"marketAddress":"0xdef","marketId":43,"yesPrice":0.2,"noPrice":0.8}
+		],
+		"blockNumber":12345678,
+		"timestamp":"2026-09-30T19:28:00.000Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnNewPriceData handler to be called")
+	}
+	if len(received.UpdatedPrices) != 2 {
+		t.Fatalf("expected two price entries, got %d", len(received.UpdatedPrices))
+	}
+	if received.UpdatedPrices[0].MarketID != 42 || received.UpdatedPrices[0].YesPrice != 0.61 {
+		t.Fatalf("unexpected first entry: %+v", received.UpdatedPrices[0])
+	}
+	if received.BlockNumber != 12345678 {
+		t.Fatalf("expected blockNumber 12345678, got %d", received.BlockNumber)
+	}
+}
+
+func TestWebSocketClient_OnNewPriceData_ParsesInitialSnapshotObject(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received NewPriceData
+	called := false
+	ws.OnNewPriceData(func(update NewPriceData) {
+		called = true
+		received = update
+	})
+
+	// Initial snapshot after subscribe_market_prices: updatedPrices is a single
+	// object (market.gateway.ts sendInitialAmmPrices), blockNumber is 0.
+	ws.dispatchLocal("newPriceData", json.RawMessage(`{
+		"marketAddress":"0xabc",
+		"updatedPrices":{
+			"collateralDecimals":6,
+			"marketAddress":"0xabc",
+			"marketId":42,
+			"noPrice":0.39,
+			"yesPrice":0.61
+		},
+		"blockNumber":0,
+		"timestamp":"2026-09-30T19:28:00.000Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnNewPriceData handler to be called for the snapshot frame")
+	}
+	if received.MarketAddress != "0xabc" {
+		t.Fatalf("expected marketAddress 0xabc, got %q", received.MarketAddress)
+	}
+	if len(received.UpdatedPrices) != 1 {
+		t.Fatalf("expected the snapshot object to normalize into one entry, got %d", len(received.UpdatedPrices))
+	}
+	e := received.UpdatedPrices[0]
+	if e.MarketID != 42 || e.MarketAddress != "0xabc" || e.YesPrice != 0.61 || e.NoPrice != 0.39 {
+		t.Fatalf("unexpected snapshot entry: %+v", e)
+	}
+	if received.BlockNumber != 0 {
+		t.Fatalf("expected blockNumber 0, got %d", received.BlockNumber)
+	}
+}
+
+func TestNewPriceData_UnmarshalJSON_NullAndMissingUpdatedPrices(t *testing.T) {
+	t.Parallel()
+
+	var withNull NewPriceData
+	if err := json.Unmarshal([]byte(`{"updatedPrices":null,"blockNumber":1}`), &withNull); err != nil {
+		t.Fatalf("null updatedPrices should decode: %v", err)
+	}
+	if withNull.UpdatedPrices != nil || withNull.BlockNumber != 1 {
+		t.Fatalf("unexpected decode of null updatedPrices: %+v", withNull)
+	}
+
+	var missing NewPriceData
+	if err := json.Unmarshal([]byte(`{"blockNumber":2}`), &missing); err != nil {
+		t.Fatalf("missing updatedPrices should decode: %v", err)
+	}
+	if missing.UpdatedPrices != nil {
+		t.Fatalf("expected nil updatedPrices, got %+v", missing.UpdatedPrices)
+	}
+
+	var bad NewPriceData
+	if err := json.Unmarshal([]byte(`{"updatedPrices":"nope"}`), &bad); err == nil {
+		t.Fatal("expected a string updatedPrices to fail")
+	}
+}
+
+func TestWebSocketClient_OnExecutionOrderEvent_ParsesOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	ws := NewWebSocketClient()
+
+	var received ExecutionOrderEvent
+	called := false
+	ws.OnExecutionOrderEvent(func(ev ExecutionOrderEvent) {
+		called = true
+		received = ev
+	})
+
+	ws.dispatchLocal("orderEvent", json.RawMessage(`{
+		"source":"OME",
+		"type":"EXECUTION",
+		"eventId":"evt-1",
+		"status":"KILLED",
+		"price":"0.450000",
+		"remainingSize":"10000000",
+		"token":"YES",
+		"side":"BUY",
+		"marketId":"9876",
+		"orderId":"ord-1",
+		"timestamp":"2026-09-30T19:28:00.000Z",
+		"userId":12345,
+		"clientOrderId":"my-tag-42",
+		"reason":"STP_MAKER_CANCELLED",
+		"occurredAt":"2026-09-30T19:27:59.900Z",
+		"publishedAt":"2026-09-30T19:28:00.010Z"
+	}`))
+
+	if !called {
+		t.Fatal("expected OnExecutionOrderEvent handler to be called")
+	}
+	if received.ClientOrderID == nil || *received.ClientOrderID != "my-tag-42" {
+		t.Fatalf("expected clientOrderId my-tag-42, got %v", received.ClientOrderID)
+	}
+	if received.Reason == nil || *received.Reason != "STP_MAKER_CANCELLED" {
+		t.Fatalf("expected reason, got %v", received.Reason)
+	}
+	if received.OccurredAt == nil || received.PublishedAt == nil {
+		t.Fatalf("expected occurredAt/publishedAt, got %v / %v", received.OccurredAt, received.PublishedAt)
+	}
+	if received.Price.Float64() != 0.45 || received.RemainingSize.Float64() != 10000000 {
+		t.Fatalf("unexpected price/remainingSize: %v / %v", received.Price, received.RemainingSize)
+	}
+}

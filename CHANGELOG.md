@@ -2,6 +2,28 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **BREAKING (type):** `UserOrder` now matches the wire shape of `GET /markets/{slug}/user-orders`: `Side`, `MarketID` and `Price` are strings (`"BUY"`, `"9876"`, `"0.5"`), the token and order-type keys are `Token` / `Type`, and the row carries `OwnerID`, `Status`, `OriginalSize`, `RemainingSize` and `ClientOrderID`. Previously `json.Unmarshal` failed on every non-empty response (the string `side`, `marketId` and `price` values could not decode into the old `json.Number`, `int` and `*float64` fields), so `GetUserOrders` could never return an order. The signature-related fields the API never sent (`Maker`, `Signer`, `Salt`, `Signature`, `Expiration`, `Nonce`, `FeeRateBps`, `SignatureType`, `TokenID`, `OrderType`, `FilledSize`) are removed.
+- **BREAKING (value):** `SortByLiquidity` is removed and `SortByTrending` (`"trending"`) is added. The server rejects `sortBy=liquidity` with 400 (`sortBy must be one of the following values: ending_soon, high_value, lp_rewards, newest, trending`).
+- **BREAKING (type):** `OrderBook.MaxSpread` and `OrderBook.MinSize` are now `flexFloat` (call `.Float64()`), matching `OrderbookData` on the WebSocket. The REST endpoint sends decimal strings on one read path and JSON numbers on the other, and the number form failed to decode into `string`. `OrderBook.Midpoint` (midpoint of the best displayed bid and ask) is added; previously it was dropped.
+- `MarketPageMarketsParams.Filters` now expands `[]string` values into repeated query keys. Previously only `[]any` was expanded; a `[]string` was stringified as a single `[btc eth]` value and matched nothing.
+- `NewPriceData` decodes the initial AMM snapshot, where the server sends `updatedPrices` as a single object instead of an array. The object is normalized into a one-element `UpdatedPrices` slice; live array frames are unchanged.
+
+### Added
+
+- `MarketSettings.TakerDelayMs` (per-market taker delay in milliseconds).
+- `MarketMetadata.ExternalSlug`, `ExternalProvider`, `FeeRate`, `FixtureID`, `HomeTeamLogo`, `AwayTeamLogo` and `OutcomeLabels`, which the API sends and the struct previously dropped.
+- `HistoryEntry.TradeEventID`, `OrderID`, `MakerMatchID` and `HistoryResponse.TotalCount`.
+- `ExecutionOrderEvent.ClientOrderID`, `Reason`, `OccurredAt` and `PublishedAt`.
+
+### Changed
+
+- `OrderExecution.SettlementStatus` documents the `CANCELED` value (self-trade prevention rejected the taker order, `Reason` `STP_TAKER_REJECTED`).
+- README and changelog no longer describe cancel-replace as atomic; the two legs report independent outcomes.
+
 ## [1.1.0]
 
 ### Added
@@ -28,7 +50,7 @@ All notable changes to the Limitless Exchange Go SDK will be documented in this 
 - `AMMService` with typed allowance check/approve/ensure workflows and AMM buy/sell requests for direct or partner-owned server wallets.
 - HMAC and Privy identity variants for AMM endpoints, strict integer-string/uint256 validation, optional transaction identifiers, and typed `422`, `425`, and `502`/`503` errors.
 - Opt-in raw HTTP responses (status, headers, and the original body) via `...WithRawResponse` methods returning a generic `RawResult[T]{ Data T; Raw *RawResponse }`, added across all API-backed service methods (Markets, Market Pages, Portfolio, API tokens, Partner accounts, Delegated orders, Server wallets, orders, and AMM). Base methods are unchanged and delegate to the raw variant. Raw mode still returns the same typed errors for `>= 400` statuses.
-- Atomic cancel-replace for orders via `OrderClient.CancelReplace` / `CancelReplaceBatch` and `DelegatedOrderService.CancelReplace` / `CancelReplaceBatch`, backed by `POST /orders/cancel-replace` and `/orders/cancel-replace/batch`. A single request cancels a resting order and submits its replacement atomically; the batch variant does so for many operations at once. The single-order variant lets the `409` conflict status through as a typed `CancelReplaceResult`. Typed `CancelReplaceParams`, `CancelReplaceRequest`, `CancelReplaceResult`, and `CancelReplaceBatchResponse` models.
+- Cancel-replace for orders via `OrderClient.CancelReplace` / `CancelReplaceBatch` and `DelegatedOrderService.CancelReplace` / `CancelReplaceBatch`, backed by `POST /orders/cancel-replace` and `/orders/cancel-replace/batch`. A single request cancels a resting order and submits its replacement in one round-trip (non-atomic; per-leg status); the batch variant does so for many operations at once. The single-order variant lets the `409` conflict status through as a typed `CancelReplaceResult`. Typed `CancelReplaceParams`, `CancelReplaceRequest`, `CancelReplaceResult`, and `CancelReplaceBatchResponse` models.
 
 These additions are non-breaking: the raw `OnOrderEvent(func(OrderEvent))`
 handler and the `OrderEvent = json.RawMessage` alias are unchanged, so existing

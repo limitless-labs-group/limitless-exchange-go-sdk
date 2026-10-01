@@ -185,3 +185,55 @@ func TestPortfolioFetcher_AuthenticatedMethods_RequireAPIKey(t *testing.T) {
 		t.Fatal("expected GetUserHistory to fail without API key")
 	}
 }
+
+func TestHistoryResponse_DecodesClobIDsAndTotalCount(t *testing.T) {
+	t.Parallel()
+
+	var resp HistoryResponse
+	if err := json.Unmarshal([]byte(`{
+		"data":[{
+			"blockTimestamp":1744115608,
+			"tradeEventId":"te-1",
+			"orderId":"ord-1",
+			"makerMatchId":"mm-1",
+			"collateralAmount":"1000000",
+			"strategy":"Buy",
+			"transactionHash":"0xhash"
+		},{
+			"blockTimestamp":1744115000,
+			"collateralAmount":"0",
+			"strategy":"Redeem"
+		}],
+		"totalCount":null,
+		"nextCursor":"abc"
+	}`), &resp); err != nil {
+		t.Fatalf("history response failed to decode: %v", err)
+	}
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected two entries, got %d", len(resp.Data))
+	}
+	clob := resp.Data[0]
+	if clob.TradeEventID == nil || *clob.TradeEventID != "te-1" {
+		t.Fatalf("expected tradeEventId te-1, got %v", clob.TradeEventID)
+	}
+	if clob.OrderID == nil || *clob.OrderID != "ord-1" || clob.MakerMatchID == nil || *clob.MakerMatchID != "mm-1" {
+		t.Fatalf("unexpected orderId/makerMatchId: %+v", clob)
+	}
+	if amm := resp.Data[1]; amm.TradeEventID != nil || amm.OrderID != nil || amm.MakerMatchID != nil {
+		t.Fatalf("expected nil CLOB ids on non-CLOB row, got %+v", amm)
+	}
+	if resp.TotalCount != nil {
+		t.Fatalf("expected nil totalCount in cursor mode, got %d", *resp.TotalCount)
+	}
+	if resp.NextCursor == nil || *resp.NextCursor != "abc" {
+		t.Fatalf("expected nextCursor abc, got %v", resp.NextCursor)
+	}
+
+	var offset HistoryResponse
+	if err := json.Unmarshal([]byte(`{"data":[],"totalCount":8,"nextCursor":null}`), &offset); err != nil {
+		t.Fatalf("offset-mode history failed to decode: %v", err)
+	}
+	if offset.TotalCount == nil || *offset.TotalCount != 8 {
+		t.Fatalf("expected totalCount 8, got %v", offset.TotalCount)
+	}
+}

@@ -16,13 +16,25 @@ type MarketCreator struct {
 	Link     *string `json:"link,omitempty"`
 }
 
-// MarketMetadata contains market metadata flags.
+// MarketMetadata contains market metadata flags plus the public venue and
+// sports keys the API attaches to a market.
 type MarketMetadata struct {
 	Fee              bool    `json:"fee"`
 	IsBannered       *bool   `json:"isBannered,omitempty"`
 	IsPolyArbitrage  *bool   `json:"isPolyArbitrage,omitempty"`
 	ShouldMarketMake *bool   `json:"shouldMarketMake,omitempty"`
 	OpenPrice        *string `json:"openPrice,omitempty"`
+	// ExternalSlug and ExternalProvider identify the venue market this market
+	// mirrors (absent on native markets; an ExternalSlug without an
+	// ExternalProvider means polymarket).
+	ExternalSlug     *string  `json:"externalSlug,omitempty"`
+	ExternalProvider *string  `json:"externalProvider,omitempty"`
+	FeeRate          *float64 `json:"feeRate,omitempty"`
+	// Sports fields: present on sports and esports markets only.
+	FixtureID     *int              `json:"fixtureId,omitempty"`
+	HomeTeamLogo  *string           `json:"homeTeamLogo,omitempty"`
+	AwayTeamLogo  *string           `json:"awayTeamLogo,omitempty"`
+	OutcomeLabels map[string]string `json:"outcomeLabels,omitempty"` // keys "0" and "1"
 }
 
 // MarketSettings contains CLOB market settings.
@@ -33,6 +45,9 @@ type MarketSettings struct {
 	RewardsEpoch any         `json:"rewardsEpoch"`
 	C            any         `json:"c"`
 	RebateRate   json.Number `json:"rebateRate,omitempty"`
+	// TakerDelayMs is the per-market taker delay in milliseconds (0 when none).
+	// FOK/FAK orders on a market with a delay return SettlementStatus "DELAYED".
+	TakerDelayMs int `json:"takerDelayMs"`
 }
 
 // TradePrices contains buy/sell price data.
@@ -90,8 +105,15 @@ type OrderBook struct {
 	Asks             []OrderBookEntry `json:"asks"`
 	TokenID          string           `json:"tokenId"`
 	AdjustedMidpoint float64          `json:"adjustedMidpoint"`
-	MaxSpread        string           `json:"maxSpread"`
-	MinSize          string           `json:"minSize"`
+	// Midpoint is the midpoint of the best displayed bid and ask, without the
+	// minSize filter that AdjustedMidpoint applies.
+	Midpoint float64 `json:"midpoint"`
+	// MaxSpread and MinSize arrive as decimal strings or JSON numbers depending
+	// on the server read path; flexFloat decodes both. Call .Float64().
+	// MinSize on this endpoint is a raw 6-decimal contract count (for example
+	// 150000000 = 150 shares), not a share count.
+	MaxSpread flexFloat `json:"maxSpread"`
+	MinSize   flexFloat `json:"minSize"`
 	// LastTradePrice is nil until the market's first trade (API sends null).
 	LastTradePrice *float64 `json:"lastTradePrice"`
 }
@@ -160,32 +182,27 @@ type Market struct {
 	ResolutionDate *string         `json:"resolutionDate,omitempty"`
 }
 
-// UserOrder represents an order returned by the user-orders endpoint.
+// UserOrder is one row of GET /markets/{slug}/user-orders. Numeric values are
+// decimal strings in raw 6-decimal units; divide by 1e6 for shares or USDC.
 type UserOrder struct {
-	ID            string      `json:"id"`
-	CreatedAt     string      `json:"createdAt"`
-	MakerAmount   json.Number `json:"makerAmount"`
-	TakerAmount   json.Number `json:"takerAmount"`
-	Expiration    *string     `json:"expiration"`
-	SignatureType int         `json:"signatureType"`
-	Salt          json.Number `json:"salt"`
-	Maker         string      `json:"maker"`
-	Signer        string      `json:"signer"`
-	Taker         string      `json:"taker"`
-	TokenID       string      `json:"tokenId"`
-	Side          json.Number `json:"side"`
-	FeeRateBps    int         `json:"feeRateBps"`
-	Nonce         int         `json:"nonce"`
-	Signature     string      `json:"signature"`
-	OrderType     string      `json:"orderType"`
-	Price         *float64    `json:"price"`
-	MarketID      int         `json:"marketId"`
-	Status        string      `json:"status,omitempty"`
-	FilledSize    json.Number `json:"filledSize,omitempty"`
+	ID            string  `json:"id"`
+	OwnerID       int     `json:"ownerId"`
+	MarketID      string  `json:"marketId"`
+	Token         string  `json:"token"`
+	Type          string  `json:"type"`   // "GTC" | "FAK" | "FOK"
+	Status        string  `json:"status"` // "LIVE" | "MATCHED" | "CANCELED" | "UNMATCHED"
+	Side          string  `json:"side"`   // "BUY" | "SELL"
+	MakerAmount   string  `json:"makerAmount"`
+	TakerAmount   string  `json:"takerAmount"`
+	Price         string  `json:"price"`
+	OriginalSize  string  `json:"originalSize"`
+	RemainingSize string  `json:"remainingSize"`
+	CreatedAt     string  `json:"createdAt"`
+	ClientOrderID *string `json:"clientOrderId,omitempty"`
 }
 
 // ActiveMarketsSortBy constrains sort values for active markets.
-// Valid values: "lp_rewards", "ending_soon", "newest", "high_value", "liquidity"
+// Valid values: "lp_rewards", "ending_soon", "newest", "high_value", "trending"
 type ActiveMarketsSortBy string
 
 const (
@@ -193,7 +210,7 @@ const (
 	SortByEndingSoon ActiveMarketsSortBy = "ending_soon"
 	SortByNewest     ActiveMarketsSortBy = "newest"
 	SortByHighValue  ActiveMarketsSortBy = "high_value"
-	SortByLiquidity  ActiveMarketsSortBy = "liquidity"
+	SortByTrending   ActiveMarketsSortBy = "trending"
 )
 
 // ActiveMarketsParams are query parameters for the active markets endpoint.

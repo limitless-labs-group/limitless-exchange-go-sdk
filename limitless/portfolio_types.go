@@ -218,7 +218,11 @@ type HistoryMarket struct {
 
 // HistoryEntry represents a user history entry (cursor-based).
 type HistoryEntry struct {
-	BlockTimestamp      int64          `json:"blockTimestamp"`
+	BlockTimestamp int64 `json:"blockTimestamp"`
+	// TradeEventID, OrderID and MakerMatchID are set on CLOB rows only.
+	TradeEventID        *string        `json:"tradeEventId,omitempty"`
+	OrderID             *string        `json:"orderId,omitempty"`
+	MakerMatchID        *string        `json:"makerMatchId,omitempty"`
 	CollateralAmount    string         `json:"collateralAmount,omitempty"`
 	Market              *HistoryMarket `json:"market,omitempty"`
 	OutcomeIndex        *int           `json:"outcomeIndex,omitempty"`
@@ -231,6 +235,8 @@ type HistoryEntry struct {
 
 // HistoryResponse is the cursor-based response for /portfolio/history.
 type HistoryResponse struct {
-	Data       []HistoryEntry `json:"data"`
-	NextCursor *string        `json:"nextCursor"`
+	Data []HistoryEntry `json:"data"`
+	// TotalCount is null in cursor mode.
+	TotalCount *int    `json:"totalCount"`
+	NextCursor *string `json:"nextCursor"`
 }

@@ -186,11 +186,16 @@ func (f *MarketPageFetcher) GetMarketsWithRawResponse(ctx context.Context, pageI
 			query.Set("cursor", params.Cursor)
 		}
 		for key, value := range params.Filters {
-			if arr, ok := value.([]any); ok {
+			switch arr := value.(type) {
+			case []any:
 				for _, item := range arr {
 					query.Add(key, stringifyFilterValue(item))
 				}
-			} else {
+			case []string:
+				for _, item := range arr {
+					query.Add(key, item)
+				}
+			default:
 				query.Add(key, stringifyFilterValue(value))
 			}
 		}

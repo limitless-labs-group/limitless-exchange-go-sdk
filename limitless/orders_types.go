@@ -306,9 +306,11 @@ type OrderExecution struct {
 	Matched bool `json:"matched"`
 	// SettlementStatus is a plain string, not a closed enum: the server adds
 	// values over time. Known values:
-	// "UNMATCHED" | "MATCHED" | "MINED" | "CONFIRMED" | "RETRYING" | "FAILED" | "DELAYED".
+	// "UNMATCHED" | "MATCHED" | "MINED" | "CONFIRMED" | "RETRYING" | "FAILED" | "DELAYED" | "CANCELED".
 	// "DELAYED" = the taker order was accepted but is held by a per-market taker
 	// delay before being released to the matching engine.
+	// "CANCELED" = the taker order was rejected by self-trade prevention
+	// (Reason "STP_TAKER_REJECTED").
 	SettlementStatus string   `json:"settlementStatus"`
 	TradeEventID     *string  `json:"tradeEventId,omitempty"`
 	TxHash           *string  `json:"txHash,omitempty"`

@@ -107,7 +107,7 @@ type MarketPageMarketsParams struct {
 	Limit   *int
 	Sort    MarketPageSort
 	Cursor  string
-	Filters map[string]any // key → value (string, bool, number, or []any for multi-value)
+	Filters map[string]any // key → value (string, bool, number, or []any / []string for multi-value)
 }
 
 // MarketPageMarketsOffsetResponse is the offset-paginated response for market page markets.
