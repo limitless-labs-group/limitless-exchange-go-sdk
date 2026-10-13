@@ -16,6 +16,7 @@ func TestDelegatedOrderService_CreateOrder(t *testing.T) {
 	t.Parallel()
 
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "test-market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("X-API-Key"); got != "api-key" {
 			t.Fatalf("expected X-API-Key api-key, got %q", got)
@@ -99,6 +100,7 @@ func TestDelegatedOrderService_CreateOrder_ReceiveWindowTopLevelOnly(t *testing.
 	t.Parallel()
 
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "test-market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -197,6 +199,7 @@ func TestDelegatedOrderService_CreateOrder_AutoStampsTimestampForRecvWindow(t *t
 	values := make(chan [2]int64, 1)
 
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "test-market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
 		var payload CreateOrderRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -310,6 +313,7 @@ func TestDelegatedOrderService_CreateOrder_DefaultFeeRate(t *testing.T) {
 	t.Parallel()
 
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "test-market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {

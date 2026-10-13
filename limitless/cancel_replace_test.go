@@ -54,6 +54,7 @@ func TestCancelTargetJSONAndResultValidation(t *testing.T) {
 func TestDelegatedCancelReplace_UnsignedTopLevelOnBehalfOfAnd409(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders/cancel-replace", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST, got %s", r.Method)
@@ -135,6 +136,7 @@ func TestOrderClientCancelReplace_SignsForVenueAnd400Errors(t *testing.T) {
 func TestDelegatedCancelReplaceBatch_Accepts207AndDoesNotLimitFour(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
+	handleTestMarket(t, mux, "market", legacyTestVenueJSON)
 	mux.HandleFunc("/orders/cancel-replace/batch", func(w http.ResponseWriter, r *http.Request) {
 		var request CancelReplaceBatchRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

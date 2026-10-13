@@ -28,14 +28,16 @@ func NewClientFromHTTP(httpClient *HttpClient) *Client {
 		logger = httpClient.logger
 	}
 
+	markets := NewMarketFetcher(httpClient, WithMarketLogger(logger))
+
 	return &Client{
 		HTTP:            httpClient,
-		Markets:         NewMarketFetcher(httpClient, WithMarketLogger(logger)),
+		Markets:         markets,
 		Portfolio:       NewPortfolioFetcher(httpClient, WithPortfolioLogger(logger)),
 		Pages:           NewMarketPageFetcher(httpClient, WithMarketPageLogger(logger)),
 		ApiTokens:       NewApiTokenService(httpClient, WithApiTokenLogger(logger)),
 		PartnerAccounts: NewPartnerAccountService(httpClient, WithPartnerAccountLogger(logger)),
-		DelegatedOrders: NewDelegatedOrderService(httpClient, WithDelegatedOrderLogger(logger)),
+		DelegatedOrders: NewDelegatedOrderService(httpClient, WithDelegatedOrderLogger(logger), WithDelegatedOrderMarketFetcher(markets)),
 		ServerWallets:   NewServerWalletService(httpClient, WithServerWalletLogger(logger)),
 		AMM:             NewAMMService(httpClient, WithAMMLogger(logger)),
 	}

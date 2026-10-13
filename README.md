@@ -180,6 +180,25 @@ LIMITLESS_SERVER_WALLET_ACCOUNT=
 - **BUY orders**: Approve USDC for `market.Venue.Exchange`
 - **SELL orders**: Approve Conditional Tokens for **both** `market.Venue.Exchange` AND `market.Venue.Adapter`
 
+### Collateral Fee Venues
+
+Some markets trade on collateral fee venues, which charge the taker fee in USDC through a separate on-chain fee module contract. Markets on existing venues behave exactly as before.
+
+1. **Detect the venue.** On a collateral fee venue, `market.Venue` carries `FeeModule` (address) and `FeeModuleType == limitless.FeeModuleTypeCollateral` (`"COLLATERAL"`). Legacy venues omit both fields. Use `market.Venue.IsCollateralFeeVenue()` (nil-safe).
+2. **Approve USDC to the fee module.** The wallet that signs orders must call `approve(market.Venue.FeeModule, amount)` on the USDC contract (max uint256 recommended). Approve once per fee module address; SIMPLE and NegRisk markets use different fee modules, so always read `market.Venue.FeeModule` from the market and never hardcode it. This is required for every order that is not `postOnly` (takers, and resting orders not flagged `postOnly`), for both BUY and SELL. Without it the API rejects the order with `Insufficient collateral allowance for the order fee.`
+3. **Keep existing approvals.** Collateral fee venues use the same exchange and NegRisk adapter contracts, so the USDC and Conditional Token approvals above stay valid, and the EIP-712 domain (verifying contract = `market.Venue.Exchange`) is unchanged.
+4. **Sign `FeeRateBps = 0`.** Orders on collateral fee venues must be signed with `FeeRateBps = 0`; any other value is rejected with `FEE_RATE_MISMATCH`. `OrderClient.CreateOrder`, `OrderClient.CancelReplace`/`CancelReplaceBatch`, and `DelegatedOrders.CreateOrder`/`CancelReplace`/`CancelReplaceBatch` do this automatically from the market venue. If you build and sign orders yourself with `BuildUnsignedOrder` + `SignOrder*` or `OrderBuilder`, set `FeeRateBps = 0` on the unsigned order before signing when the venue is a collateral fee venue.
+5. **Keep a little extra USDC.** BUY orders on collateral fee venues need enough USDC for the order plus the trading fee.
+
+Wallets that Limitless provisions and manages (server wallets / API-key managed wallets) get these approvals automatically.
+
+```go
+market, _ := sdk.Markets.GetMarket(ctx, "market-slug")
+if market.Venue.IsCollateralFeeVenue() {
+    // approve(market.Venue.FeeModule, maxUint256) on USDC from the order signer
+}
+```
+
 ### Placing a GTC (Limit) Order
 
 ```go
