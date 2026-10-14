@@ -2,6 +2,28 @@
 
 All notable changes to the Limitless Exchange Go SDK will be documented in this file.
 
+## [1.2.0]
+
+### Added
+
+- Collateral fee venue support: `Venue` now exposes `FeeModule` and `FeeModuleType`
+  (both `omitempty`, absent on legacy venues), the `FeeModuleTypeCollateral`
+  constant, and the nil-safe `(*Venue).IsCollateralFeeVenue()` helper.
+- `OrderClient.CreateOrder` and the direct cancel-replace builder sign orders with
+  `FeeRateBps = 0` on collateral fee venues. Legacy venues keep the profile fee rate.
+- `DelegatedOrderService` (create, cancel-replace and cancel-replace batch) submits
+  `FeeRateBps = 0` on collateral fee venues. It resolves the market venue through a
+  `MarketFetcher` (cached, or fetched once per market); the new
+  `WithDelegatedOrderMarketFetcher` option shares a fetcher, and `NewClientFromHTTP`
+  wires `Client.Markets` into `Client.DelegatedOrders` automatically.
+- README documents the additional USDC approval to `venue.feeModule` required for
+  every non-`postOnly` order (BUY and SELL) on collateral fee venues.
+
+### Changed
+
+- `BuildUnsignedOrder` and `SignOrderForMarket` document that callers signing by hand
+  must set `FeeRateBps = 0` on collateral fee venues.
+
 ## [1.1.0]
 
 ### Added

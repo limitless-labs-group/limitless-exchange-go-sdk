@@ -1,10 +1,10 @@
 # Limitless Exchange Go SDK
 
-**v1.1.0** | Production-Ready | Type-Safe | Fully Documented
+**v1.2.0** | Production-Ready | Type-Safe | Fully Documented
 
 A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
 
-> **v1.1.0 Release**: Adds typed `MATCHED` and `EXECUTION` `orderEvent` handlers (`OnMatchedOrderEvent`, `OnExecutionOrderEvent`); non-breaking. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
+> **v1.2.0 Release**: Adds collateral fee venue support (`Venue.FeeModule`, `Venue.FeeModuleType`, `(*Venue).IsCollateralFeeVenue()`); orders on collateral fee venues are signed with `FeeRateBps = 0` automatically; non-breaking. See [CHANGELOG.md](https://github.com/limitless-labs-group/limitless-exchange-go-sdk/blob/main/CHANGELOG.md) for release notes.
 
 ## Disclaimer
 
@@ -43,7 +43,7 @@ This SDK is provided "as-is" without any warranties or guarantees. Trading on pr
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.1.0
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.2.0
 ```
 
 Requires Go 1.24 or later.
