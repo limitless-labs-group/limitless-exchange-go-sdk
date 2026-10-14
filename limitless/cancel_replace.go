@@ -58,10 +58,11 @@ func (oc *OrderClient) buildDirectCancelReplaceOrder(ctx context.Context, params
 	if err != nil {
 		return CancelReplaceOrder{}, fmt.Errorf("failed to build replacement order: %w", err)
 	}
-	signingConfig, err := oc.resolveSigningConfigForMarket(ctx, params.MarketSlug)
+	signingConfig, venue, err := oc.resolveVenueSigningConfig(ctx, params.MarketSlug)
 	if err != nil {
 		return CancelReplaceOrder{}, err
 	}
+	applyVenueFeeRate(unsignedOrder, venue)
 	signature, err := oc.signer.SignOrder(unsignedOrder, signingConfig)
 	if err != nil {
 		return CancelReplaceOrder{}, fmt.Errorf("failed to sign replacement order: %w", err)
@@ -73,7 +74,7 @@ func (s *DelegatedOrderService) CancelReplace(ctx context.Context, params Delega
 	if err := s.client.requireAuth("DelegatedCancelReplace"); err != nil {
 		return nil, err
 	}
-	request, err := buildDelegatedCancelReplaceRequest(params)
+	request, err := s.buildDelegatedCancelReplaceRequest(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +90,7 @@ func (s *DelegatedOrderService) CancelReplaceBatch(ctx context.Context, operatio
 	}
 	requests := make([]CancelReplaceRequest, len(operations))
 	for i, operation := range operations {
-		request, err := buildDelegatedCancelReplaceRequest(operation)
+		request, err := s.buildDelegatedCancelReplaceRequest(ctx, operation)
 		if err != nil {
 			return nil, fmt.Errorf("operation %d: %w", i, err)
 		}
@@ -98,15 +99,15 @@ func (s *DelegatedOrderService) CancelReplaceBatch(ctx context.Context, operatio
 	return submitCancelReplaceBatch(ctx, s.client, CancelReplaceBatchRequest{Operations: requests})
 }
 
-func buildDelegatedCancelReplaceRequest(params DelegatedCancelReplaceParams) (CancelReplaceRequest, error) {
+func (s *DelegatedOrderService) buildDelegatedCancelReplaceRequest(ctx context.Context, params DelegatedCancelReplaceParams) (CancelReplaceRequest, error) {
 	if params.OnBehalfOf <= 0 {
 		return CancelReplaceRequest{}, fmt.Errorf("OnBehalfOf must be a positive integer")
 	}
-	feeRateBps := params.FeeRateBps
-	if feeRateBps <= 0 {
-		feeRateBps = defaultDelegatedFeeRateBps
-	}
 	receiveWindow, err := normalizeReceiveWindowOptions(params.Replacement.ReceiveWindow, time.Now().UnixMilli)
+	if err != nil {
+		return CancelReplaceRequest{}, err
+	}
+	feeRateBps, err := s.resolveFeeRateBps(ctx, params.Replacement.MarketSlug, params.FeeRateBps)
 	if err != nil {
 		return CancelReplaceRequest{}, err
 	}

@@ -172,7 +172,7 @@ func (oc *OrderClient) CreateOrderWithRawResponse(ctx context.Context, params Cr
 		"marketSlug": params.MarketSlug,
 	})
 
-	signingConfig, err := oc.resolveSigningConfigForMarket(ctx, params.MarketSlug)
+	signingConfig, venue, err := oc.resolveVenueSigningConfig(ctx, params.MarketSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +182,7 @@ func (oc *OrderClient) CreateOrderWithRawResponse(ctx context.Context, params Cr
 	if err != nil {
 		return nil, fmt.Errorf("failed to build order: %w", err)
 	}
+	applyVenueFeeRate(unsignedOrder, venue)
 
 	// Sign the order
 	signature, err := oc.signer.SignOrder(unsignedOrder, signingConfig)
@@ -279,6 +280,8 @@ func (oc *OrderClient) CancelAllWithRawResponse(ctx context.Context, marketSlug 
 }
 
 // BuildUnsignedOrder builds an unsigned order without signing or submitting.
+// It does not know the market venue: on collateral fee venues
+// (Venue.IsCollateralFeeVenue) set FeeRateBps = 0 before signing.
 func (oc *OrderClient) BuildUnsignedOrder(ctx context.Context, args OrderArgs) (*UnsignedOrder, error) {
 	if _, err := oc.ensureUserData(ctx); err != nil {
 		return nil, err
@@ -302,6 +305,7 @@ func (oc *OrderClient) SignOrderWithConfig(order *UnsignedOrder, config OrderSig
 
 // SignOrderForMarket signs an unsigned order using the venue.exchange of the given market.
 // If the market has no venue exchange, a configured fallback contract address is used.
+// The order is signed as given; on collateral fee venues its FeeRateBps must be 0.
 func (oc *OrderClient) SignOrderForMarket(ctx context.Context, marketSlug string, order *UnsignedOrder) (string, error) {
 	config, err := oc.resolveSigningConfigForMarket(ctx, marketSlug)
 	if err != nil {
@@ -327,39 +331,59 @@ func (oc *OrderClient) OwnerID() *int {
 }
 
 func (oc *OrderClient) resolveSigningConfigForMarket(ctx context.Context, marketSlug string) (OrderSigningConfig, error) {
-	var venue *Venue
+	config, _, err := oc.resolveVenueSigningConfig(ctx, marketSlug)
+	return config, err
+}
 
-	if cachedVenue, ok := oc.marketFetcher.GetVenue(marketSlug); ok && cachedVenue.Exchange != "" {
-		venue = &cachedVenue
-	} else {
-		oc.logger.Warn("Venue not cached, fetching market details. "+
-			"For better performance, call marketFetcher.GetMarket() before CreateOrder().",
-			map[string]any{"marketSlug": marketSlug})
-
-		market, err := oc.marketFetcher.GetMarket(ctx, marketSlug)
-		if err != nil {
-			return OrderSigningConfig{}, fmt.Errorf("failed to fetch market: %w", err)
-		}
-		if market.Venue != nil {
-			venue = market.Venue
-		}
+// resolveVenueSigningConfig resolves the market venue and the EIP-712 signing
+// config derived from it. The returned venue may be nil when the market has none.
+func (oc *OrderClient) resolveVenueSigningConfig(ctx context.Context, marketSlug string) (OrderSigningConfig, *Venue, error) {
+	venue, err := resolveMarketVenue(ctx, oc.marketFetcher, oc.logger, marketSlug)
+	if err != nil {
+		return OrderSigningConfig{}, nil, err
 	}
 
 	config := oc.signingConfig
 	if venue != nil && venue.Exchange != "" {
 		config.ContractAddress = venue.Exchange
-		return config, nil
+		return config, venue, nil
 	}
 
 	if err := validateSigningConfig(config); err == nil {
 		oc.logger.Warn("Market venue is missing an exchange contract; using fallback signing config", map[string]any{
 			"marketSlug": marketSlug,
 		})
-		return config, nil
+		return config, venue, nil
 	}
 
-	return OrderSigningConfig{}, fmt.Errorf(
+	return OrderSigningConfig{}, nil, fmt.Errorf(
 		"market %s does not expose venue.exchange and no fallback signing contract is configured",
 		marketSlug,
 	)
+}
+
+// resolveMarketVenue returns the cached venue for a market, fetching the market
+// when the venue is not cached yet. It returns nil when the market has no venue.
+func resolveMarketVenue(ctx context.Context, fetcher *MarketFetcher, logger Logger, marketSlug string) (*Venue, error) {
+	if cachedVenue, ok := fetcher.GetVenue(marketSlug); ok && cachedVenue.Exchange != "" {
+		return &cachedVenue, nil
+	}
+
+	logger.Warn("Venue not cached, fetching market details. "+
+		"For better performance, call marketFetcher.GetMarket() before creating orders.",
+		map[string]any{"marketSlug": marketSlug})
+
+	market, err := fetcher.GetMarket(ctx, marketSlug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch market: %w", err)
+	}
+	return market.Venue, nil
+}
+
+// applyVenueFeeRate signs collateral fee venue orders with FeeRateBps = 0, which
+// those venues require. Orders on legacy venues are left unchanged.
+func applyVenueFeeRate(order *UnsignedOrder, venue *Venue) {
+	if venue.IsCollateralFeeVenue() {
+		order.FeeRateBps = 0
+	}
 }

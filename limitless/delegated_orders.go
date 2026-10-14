@@ -11,8 +11,9 @@ const defaultDelegatedFeeRateBps = 300
 
 // DelegatedOrderService creates orders that the API signs on behalf of a target profile.
 type DelegatedOrderService struct {
-	client *HttpClient
-	logger Logger
+	client        *HttpClient
+	logger        Logger
+	marketFetcher *MarketFetcher
 }
 
 // DelegatedOrderServiceOption configures a DelegatedOrderService.
@@ -25,6 +26,14 @@ func WithDelegatedOrderLogger(l Logger) DelegatedOrderServiceOption {
 	}
 }
 
+// WithDelegatedOrderMarketFetcher sets a shared MarketFetcher so cached venue
+// data is reused when building delegated orders.
+func WithDelegatedOrderMarketFetcher(f *MarketFetcher) DelegatedOrderServiceOption {
+	return func(s *DelegatedOrderService) {
+		s.marketFetcher = f
+	}
+}
+
 // NewDelegatedOrderService creates a new delegated-order service.
 func NewDelegatedOrderService(client *HttpClient, opts ...DelegatedOrderServiceOption) *DelegatedOrderService {
 	s := &DelegatedOrderService{
@@ -34,7 +43,26 @@ func NewDelegatedOrderService(client *HttpClient, opts ...DelegatedOrderServiceO
 	for _, opt := range opts {
 		opt(s)
 	}
+	if s.marketFetcher == nil {
+		s.marketFetcher = NewMarketFetcher(client, WithMarketLogger(s.logger))
+	}
 	return s
+}
+
+// resolveFeeRateBps returns the fee rate to put on a delegated order. Collateral
+// fee venues require 0; legacy venues keep the requested rate or the default.
+func (s *DelegatedOrderService) resolveFeeRateBps(ctx context.Context, marketSlug string, requested int) (int, error) {
+	venue, err := resolveMarketVenue(ctx, s.marketFetcher, s.logger, marketSlug)
+	if err != nil {
+		return 0, err
+	}
+	if venue.IsCollateralFeeVenue() {
+		return 0, nil
+	}
+	if requested <= 0 {
+		return defaultDelegatedFeeRateBps, nil
+	}
+	return requested, nil
 }
 
 // CreateOrder builds an unsigned order and lets the API sign it on behalf of a target profile.
@@ -59,11 +87,12 @@ func (s *DelegatedOrderService) CreateOrderWithRawResponse(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	if params.FeeRateBps <= 0 {
-		params.FeeRateBps = defaultDelegatedFeeRateBps
+	feeRateBps, err := s.resolveFeeRateBps(ctx, params.MarketSlug, params.FeeRateBps)
+	if err != nil {
+		return nil, err
 	}
 
-	builder := NewOrderBuilder(ZeroAddress, params.FeeRateBps)
+	builder := NewOrderBuilder(ZeroAddress, feeRateBps)
 	unsignedOrder, err := builder.BuildOrder(params.Args)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build delegated order: %w", err)

@@ -14,7 +14,7 @@ It provides:
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.1.0
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.2.0
 ```
 
 ## Import
@@ -227,6 +227,8 @@ Available on `Markets`, `Pages`, `Portfolio`, `ApiTokens`, `PartnerAccounts`,
 ## Orders
 
 Use `NewOrderClient` to create signed orders.
+
+On collateral fee venues (`market.Venue.IsCollateralFeeVenue()`), the order client and delegated-order service sign/submit `FeeRateBps = 0` automatically, and the order signer must approve USDC to `market.Venue.FeeModule` before placing any order that is not `postOnly`. See "Collateral Fee Venues" in the repository README.
 
 ### GTC
 

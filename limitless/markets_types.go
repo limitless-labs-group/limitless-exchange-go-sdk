@@ -65,10 +65,32 @@ type MarketOutcome struct {
 	Price   *float64 `json:"price,omitempty"`
 }
 
+// FeeModuleTypeCollateral marks a venue whose taker fee is charged in USDC by a
+// separate on-chain fee module (see Venue.FeeModule).
+const FeeModuleTypeCollateral = "COLLATERAL"
+
 // Venue contains exchange and adapter contract addresses for CLOB markets.
+//
+// FeeModule and FeeModuleType are only present on collateral fee venues; legacy
+// venues omit both. Use IsCollateralFeeVenue to tell them apart.
 type Venue struct {
 	Exchange string  `json:"exchange"`
 	Adapter  *string `json:"adapter"`
+	// FeeModule is the fee module contract address on collateral fee venues.
+	// The order signer must approve USDC to this address before placing any
+	// order that is not postOnly. Always read it from the market; it differs
+	// between SIMPLE and NegRisk markets.
+	FeeModule string `json:"feeModule,omitempty"`
+	// FeeModuleType is FeeModuleTypeCollateral on collateral fee venues and
+	// empty on legacy venues.
+	FeeModuleType string `json:"feeModuleType,omitempty"`
+}
+
+// IsCollateralFeeVenue reports whether the venue charges the taker fee in USDC
+// through a separate fee module. Orders on such venues must be signed with
+// FeeRateBps = 0. It is safe to call on a nil venue.
+func (v *Venue) IsCollateralFeeVenue() bool {
+	return v != nil && v.FeeModuleType == FeeModuleTypeCollateral
 }
 
 // MarketTokens contains YES/NO token IDs.
