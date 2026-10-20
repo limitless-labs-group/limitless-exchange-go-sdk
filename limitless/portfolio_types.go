@@ -21,9 +21,10 @@ type ReferralData struct {
 // UserProfile represents a user profile from the API (1:1 with API response).
 type UserProfile struct {
 	// Core fields
-	ID      int       `json:"id"`
-	Account string    `json:"account"`
-	Rank    *UserRank `json:"rank,omitempty"`
+	ID                  int       `json:"id"`
+	Account             string    `json:"account"`
+	Rank                *UserRank `json:"rank,omitempty"`
+	EffectiveFeeRateBps *int      `json:"effectiveFeeRateBps,omitempty"`
 
 	// Profile information
 	CreatedAt         *string `json:"createdAt,omitempty"`

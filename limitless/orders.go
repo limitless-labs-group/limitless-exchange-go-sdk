@@ -2,6 +2,7 @@ package limitless
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -124,6 +125,9 @@ func (oc *OrderClient) ensureUserData(ctx context.Context) (*UserData, error) {
 	if profile.Rank != nil {
 		feeRateBps = profile.Rank.FeeRateBps
 	}
+	if profile.EffectiveFeeRateBps != nil {
+		feeRateBps = *profile.EffectiveFeeRateBps
+	}
 
 	oc.userData = &UserData{
 		UserID:     profile.ID,
@@ -177,57 +181,83 @@ func (oc *OrderClient) CreateOrderWithRawResponse(ctx context.Context, params Cr
 		return nil, err
 	}
 
-	// Build unsigned order
-	unsignedOrder, err := oc.builder.BuildOrder(params.Args)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build order: %w", err)
+	builder := oc.builder
+	for attempt := 0; attempt < 2; attempt++ {
+		unsignedOrder, err := builder.BuildOrder(params.Args)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build order: %w", err)
+		}
+
+		signature, err := oc.signer.SignOrder(unsignedOrder, signingConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign order: %w", err)
+		}
+
+		payload := NewOrderPayload{
+			Order: SignedOrder{
+				Salt:          unsignedOrder.Salt,
+				Maker:         unsignedOrder.Maker,
+				Signer:        unsignedOrder.Signer,
+				Taker:         unsignedOrder.Taker,
+				TokenID:       unsignedOrder.TokenID,
+				MakerAmount:   unsignedOrder.MakerAmount,
+				TakerAmount:   unsignedOrder.TakerAmount,
+				Expiration:    unsignedOrder.Expiration,
+				Nonce:         unsignedOrder.Nonce,
+				FeeRateBps:    unsignedOrder.FeeRateBps,
+				Side:          unsignedOrder.Side,
+				SignatureType: unsignedOrder.SignatureType,
+				Price:         unsignedOrder.Price,
+				Signature:     signature,
+			},
+			OrderType:  params.OrderType,
+			MarketSlug: params.MarketSlug,
+			OwnerID:    userData.UserID,
+			PostOnly:   postOnlyFromArgs(params.Args),
+			Timestamp:  receiveWindow.Timestamp,
+			RecvWindow: receiveWindow.RecvWindow,
+		}
+
+		raw, postErr := oc.client.PostRaw(ctx, "/orders", payload)
+		if postErr != nil {
+			expectedFeeRateBps, ok := feeRateMismatchExpectedFee(postErr)
+			if attempt != 0 || !ok {
+				return nil, postErr
+			}
+			builder = NewOrderBuilder(oc.signer.Address().Hex(), expectedFeeRateBps)
+			continue
+		}
+
+		result, err := decodeRawResult[OrderResponse](raw, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		oc.logger.Info("Order created successfully", map[string]any{
+			"orderId": result.Data.Order.ID,
+		})
+		return result, nil
 	}
 	applyVenueFeeRate(unsignedOrder, venue)
 
-	// Sign the order
-	signature, err := oc.signer.SignOrder(unsignedOrder, signingConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign order: %w", err)
+	return nil, fmt.Errorf("order submission failed")
+}
+
+func feeRateMismatchExpectedFee(err error) (int, bool) {
+	validationError, ok := err.(*ValidationError)
+	if !ok || validationError.Status != 400 {
+		return 0, false
 	}
-
-	// Prepare payload
-	payload := NewOrderPayload{
-		Order: SignedOrder{
-			Salt:          unsignedOrder.Salt,
-			Maker:         unsignedOrder.Maker,
-			Signer:        unsignedOrder.Signer,
-			Taker:         unsignedOrder.Taker,
-			TokenID:       unsignedOrder.TokenID,
-			MakerAmount:   unsignedOrder.MakerAmount,
-			TakerAmount:   unsignedOrder.TakerAmount,
-			Expiration:    unsignedOrder.Expiration,
-			Nonce:         unsignedOrder.Nonce,
-			FeeRateBps:    unsignedOrder.FeeRateBps,
-			Side:          unsignedOrder.Side,
-			SignatureType: unsignedOrder.SignatureType,
-			Price:         unsignedOrder.Price,
-			Signature:     signature,
-		},
-		OrderType:  params.OrderType,
-		MarketSlug: params.MarketSlug,
-		OwnerID:    userData.UserID,
-		PostOnly:   postOnlyFromArgs(params.Args),
-		Timestamp:  receiveWindow.Timestamp,
-		RecvWindow: receiveWindow.RecvWindow,
+	var data struct {
+		Code               string `json:"code"`
+		ExpectedFeeRateBps *int   `json:"expectedFeeRateBps"`
 	}
-
-	// Submit to API
-	raw, err := oc.client.PostRaw(ctx, "/orders", payload)
-	result, err := decodeRawResult[OrderResponse](raw, err)
-	if err != nil {
-		return nil, err
+	if json.Unmarshal(validationError.Data, &data) != nil ||
+		data.Code != "FEE_RATE_MISMATCH" ||
+		data.ExpectedFeeRateBps == nil {
+		return 0, false
 	}
-
-	oc.logger.Info("Order created successfully", map[string]any{
-		"orderId": result.Data.Order.ID,
-	})
-
-	return result, nil
+	return *data.ExpectedFeeRateBps, true
 }
 
 // CancelResponse is the response from a cancel operation.
