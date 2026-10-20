@@ -10,7 +10,7 @@ import (
 const sdkID = "lmts-sdk-go"
 
 // sdkVersion is injected at release build time via -ldflags.
-var sdkVersion = "1.2.0"
+var sdkVersion = "1.3.0"
 
 func resolveSDKVersion() string {
 	if sdkVersion != "" {

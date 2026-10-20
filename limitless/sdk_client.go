@@ -14,6 +14,7 @@ type Client struct {
 	DelegatedOrders *DelegatedOrderService
 	ServerWallets   *ServerWalletService
 	AMM             *AMMService
+	Packs           *PacksService
 }
 
 // NewClient constructs a root SDK client with shared domain services.
@@ -32,6 +33,7 @@ func NewClientFromHTTP(httpClient *HttpClient) *Client {
 
 	return &Client{
 		HTTP:            httpClient,
+		Packs:           NewPacksService(httpClient),
 		Markets:         markets,
 		Portfolio:       NewPortfolioFetcher(httpClient, WithPortfolioLogger(logger)),
 		Pages:           NewMarketPageFetcher(httpClient, WithMarketPageLogger(logger)),
