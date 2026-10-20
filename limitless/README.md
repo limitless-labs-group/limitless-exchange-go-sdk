@@ -14,7 +14,7 @@ It provides:
 ## Installation
 
 ```bash
-go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.2.0
+go get github.com/limitless-labs-group/limitless-exchange-go-sdk@v1.3.0
 ```
 
 ## Import

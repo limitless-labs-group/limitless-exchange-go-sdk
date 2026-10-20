@@ -306,14 +306,14 @@ func (c *HttpClient) doRequestRawWithConfig(
 	if resp.StatusCode >= 400 && !isAllowed {
 		c.logger.Debug(fmt.Sprintf("✗ %d %s %s", resp.StatusCode, method, path), map[string]any{
 			"headers": headersForLog(resp.Header),
-			"error":   string(respBody),
+			"error":   packLogBody(path, respBody),
 		})
 		return nil, parseAPIError(resp.StatusCode, respBody, path, method)
 	}
 
 	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path), map[string]any{
 		"headers": headersForLog(resp.Header),
-		"body":    string(respBody),
+		"body":    packLogBody(path, respBody),
 	})
 
 	return &RawResponse{
@@ -387,14 +387,14 @@ func (c *HttpClient) doRequestWithConfig(
 	if resp.StatusCode >= 400 {
 		c.logger.Debug(fmt.Sprintf("✗ %d %s %s", resp.StatusCode, method, path), map[string]any{
 			"headers": headersForLog(resp.Header),
-			"error":   string(respBody),
+			"error":   packLogBody(path, respBody),
 		})
 		return parseAPIError(resp.StatusCode, respBody, path, method)
 	}
 
 	c.logger.Debug(fmt.Sprintf("✓ %d %s %s", resp.StatusCode, method, path), map[string]any{
 		"headers": headersForLog(resp.Header),
-		"body":    string(respBody),
+		"body":    packLogBody(path, respBody),
 	})
 
 	if result != nil && len(respBody) > 0 {
@@ -515,4 +515,11 @@ func headersForLog(headers http.Header) map[string]string {
 		logHeaders[key] = strings.Join(values, ", ")
 	}
 	return logHeaders
+}
+
+func packLogBody(path string, body []byte) string {
+	if strings.HasPrefix(path, "/parlay/") {
+		return "[Pack response omitted]"
+	}
+	return string(body)
 }
