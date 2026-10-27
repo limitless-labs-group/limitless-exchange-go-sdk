@@ -2,7 +2,7 @@
 
 **v1.3.0** | Production-Ready | Type-Safe | Fully Documented
 
-A Go SDK for interacting with the Limitless Exchange platform, providing access to CLOB and NegRisk prediction markets.
+The official Go SDK for the [Limitless Exchange](https://limitless.exchange) prediction market API on Base. Build trading bots with REST and WebSocket clients, order-book (CLOB) and NegRisk market support, and EIP-712 order signing. Docs: [docs.limitless.exchange](https://docs.limitless.exchange/developers/sdk/go/getting-started).
 
 > **v1.3.0 Release**: Adds partner curated Packs buy and claim APIs, recovery-aware polling, and typed error guidance. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
